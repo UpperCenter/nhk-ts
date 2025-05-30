@@ -1,6 +1,6 @@
 {
   "name": "nhk-ts",
-  "version": "0.0.2",
+  "version": "0.0.0",
   "description": "TVHeadEnd Recording Trimmer using FFmpeg black detection",
   "type": "module",
   "main": "dist/index.js",
@@ -29,9 +29,9 @@
   "author": "UpperCenter",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.15.21",
-    "@typescript-eslint/eslint-plugin": "^8.32.1",
-    "@typescript-eslint/parser": "^8.32.1",
+    "@types/node": "^22.15.27",
+    "@typescript-eslint/eslint-plugin": "^8.33.0",
+    "@typescript-eslint/parser": "^8.33.0",
     "eslint": "^9.27.0",
     "eslint-config-prettier": "^10.1.5",
     "prettier": "^3.5.3",
