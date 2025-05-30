@@ -1,12 +1,13 @@
-FROM ubuntu:24.04 AS builder
+FROM archlinux:latest AS builder
 
-RUN apt-get update && apt-get install -y \
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
     curl \
-    apt-transport-https \
     ca-certificates \
-    gnupg
+    gnupg \
+    base-devel
 
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
+RUN pacman -S --noconfirm nodejs npm
 
 WORKDIR /app
 
@@ -18,43 +19,29 @@ COPY . .
 
 RUN npm run build
 
-FROM ubuntu:24.04
+FROM archlinux:latest
 
-RUN apt-get update && apt-get install -y \
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
     curl \
-    apt-transport-https \
     ca-certificates \
     gnupg \
-    software-properties-common \
     bash \
     mediainfo \
-    build-essential \
-    libltdl-dev \
-    libjpeg-dev \
-    libpng-dev \
-    libtiff-dev \
-    libgif-dev \
-    libfreetype6-dev \
-    liblcms2-dev \
-    libxml2-dev \
-    wget
-
-# Install ImageMagick 7 from source
-RUN wget https://imagemagick.org/archive/ImageMagick.tar.gz && \
-    tar xzf ImageMagick.tar.gz && \ 
-    cd ImageMagick-7.1.1-* && \
-    ./configure --with-modules && \
-    make && \
-    make install && \
-    ldconfig /usr/local/lib && \
-    cd .. && \
-    rm -rf ImageMagick-7.1.1-* ImageMagick.tar.gz
-
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    add-apt-repository ppa:ubuntuhandbook1/ffmpeg7 && \
-    apt-get update && apt-get install -y ffmpeg && \
-    rm -rf /var/lib/apt/lists/*
+    base-devel \
+    libjpeg-turbo \
+    libpng \
+    libtiff \
+    giflib \
+    freetype2 \
+    lcms2 \
+    libxml2 \
+    wget \
+    nodejs \
+    npm \
+    imagemagick \
+    ffmpeg && \
+    pacman -Scc --noconfirm
 
 RUN groupadd -g 1001 nhk && useradd -r -u 1001 -g nhk nhk
 
