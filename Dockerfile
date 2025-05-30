@@ -40,10 +40,23 @@ RUN pacman -Syu --noconfirm && \
     nodejs \
     npm \
     imagemagick \
-    ffmpeg && \
+    ffmpeg \
+    x264 \
+    x265 \
+    libvpx \
+    opus \
+    lame \
+    libvorbis \
+    aom \
+    dav1d \
+    svt-av1 \
+    libass \
+    fribidi \
+    fontconfig \
+    harfbuzz && \
     pacman -Scc --noconfirm
 
-RUN groupadd -g 1001 nhk && useradd -r -u 1001 -g nhk nhk
+RUN groupadd -g 1000 nhk && useradd -r -u 1000 -g nhk nhk
 
 WORKDIR /app
 
