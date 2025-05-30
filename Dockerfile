@@ -6,9 +6,7 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg
 
-RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
-    apt-get install -y nodejs && \
-    rm -rf /var/lib/apt/lists/*
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && apt-get install -y nodejs && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -30,13 +28,32 @@ RUN apt-get update && apt-get install -y \
     software-properties-common \
     bash \
     mediainfo \
-    imagemagick
+    build-essential \
+    libltdl-dev \
+    libjpeg-dev \
+    libpng-dev \
+    libtiff-dev \
+    libgif-dev \
+    libfreetype6-dev \
+    liblcms2-dev \
+    libxml2-dev \
+    wget
+
+# Install ImageMagick 7 from source
+RUN wget https://imagemagick.org/archive/ImageMagick.tar.gz && \
+    tar xzf ImageMagick.tar.gz && \ 
+    cd ImageMagick-7.1.1-* && \
+    ./configure --with-modules && \
+    make && \
+    make install && \
+    ldconfig /usr/local/lib && \
+    cd .. && \
+    rm -rf ImageMagick-7.1.1-* ImageMagick.tar.gz
 
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - && \
     apt-get install -y nodejs && \
     add-apt-repository ppa:ubuntuhandbook1/ffmpeg7 && \
-    apt-get update && \
-    apt-get install -y ffmpeg && \
+    apt-get update && apt-get install -y ffmpeg && \
     rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -g 1001 nhk && useradd -r -u 1001 -g nhk nhk
