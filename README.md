@@ -28,6 +28,10 @@ A specialised command-line tool designed for archivists and enthusiasts to manag
   - MPV
   - Other modern media players
 
+## Wiki
+
+For detailed information, frequently asked questions, installation instructions, and more, please refer to the [GitHub Wiki](https://github.com/UpperCenter/nhk-ts/wiki).
+
 ## How It Works
 
 ### Programme Detection
@@ -63,7 +67,3 @@ The tool uses a two-step process to identify programme boundaries:
 - Maintains original audio streams
 - Outputs to either MKV or MP4 containers
 - Uses CRF (Constant Rate Factor) for quality control
-
-## Wiki
-
-For detailed information, frequently asked questions, installation instructions, and more, please refer to the [GitHub Wiki](https://github.com/UpperCenter/nhk-ts/wiki).
