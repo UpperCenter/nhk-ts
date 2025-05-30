@@ -1,0 +1,51 @@
+{
+  "name": "nhk-ts",
+  "version": "0.0.2",
+  "description": "TVHeadEnd Recording Trimmer using FFmpeg black detection",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "nhk-ts": "./dist/index.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "rimraf dist && tsc",
+    "lint": "eslint 'src/**/*.ts'",
+    "lint:fix": "eslint 'src/**/*.ts' --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "type-check": "tsc --noEmit",
+    "clean": "rimraf dist"
+  },
+  "keywords": [
+    "cli",
+    "nhk",
+    "ffmpeg",
+    "video",
+    "trimmer"
+  ],
+  "author": "UpperCenter",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^22.15.21",
+    "@typescript-eslint/eslint-plugin": "^8.32.1",
+    "@typescript-eslint/parser": "^8.32.1",
+    "eslint": "^9.27.0",
+    "eslint-config-prettier": "^10.1.5",
+    "prettier": "^3.5.3",
+    "rimraf": "^6.0.1",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.19.4",
+    "typescript": "^5.8.3",
+    "@types/cheerio": "^1.0.0"
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "commander": "^14.0.0",
+    "p-limit": "^6.2.0",
+    "cheerio": "^1.0.0",
+    "string-similarity": "^4.0.4"
+  }
+}
