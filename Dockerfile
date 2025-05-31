@@ -53,7 +53,9 @@ RUN pacman -Syu --noconfirm && \
     libass \
     fribidi \
     fontconfig \
-    harfbuzz && \
+    harfbuzz \
+    ncurses \
+    less && \
     pacman -Scc --noconfirm
 
 RUN groupadd -g 1000 nhk && useradd -r -u 1000 -g nhk nhk
@@ -71,6 +73,9 @@ RUN mkdir -p /input /output /cache && chown -R nhk:nhk /app /input /output /cach
 USER nhk
 
 ENV NODE_ENV=production
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
+ENV FORCE_COLOR=1
 
 VOLUME ["/input", "/output", "/cache"]
 
