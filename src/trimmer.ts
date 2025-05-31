@@ -11,6 +11,7 @@ import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
 import { loadEpisodes } from './metadata/episodeService.js';
 import { lookupEpisodeByDescription } from './metadata/lookup.js';
+import { getHardcodedMapping } from './metadata/hardcodedMappings.js';
 import type { NfoData, EpisodeMetadata, MetadataInfo } from './metadata/types.js';
 
 export class TVHeadEndTrimmer {
@@ -375,9 +376,23 @@ export class TVHeadEndTrimmer {
                 this.logger.warn('[METADATA] TVDB API key missing; skipping metadata lookup');
             } else {
                 this.logger.info('[METADATA] Searching TVDB for series information');
-                const token = await login(this.options.tvdbApiKey, this.options.metadataUserAgent!);
-                this.logger.debug('[METADATA] TVDB login successful');
-                seriesInfo = await searchSeries(nfoData.title, token, this.options.metadataUserAgent!);
+
+                // Check for hardcoded mapping first
+                const hardcodedMapping = getHardcodedMapping(nfoData.title);
+                if (hardcodedMapping) {
+                    this.logger.info(`[METADATA] Using hardcoded mapping for "${nfoData.title}"`);
+                    seriesInfo = {
+                        tvdb_id: hardcodedMapping.tvdb_id,
+                        slug: hardcodedMapping.slug,
+                        name: hardcodedMapping.name,
+                        year: hardcodedMapping.year
+                    };
+                } else {
+                    const token = await login(this.options.tvdbApiKey, this.options.metadataUserAgent!);
+                    this.logger.debug('[METADATA] TVDB login successful');
+                    seriesInfo = await searchSeries(nfoData.title, token, this.options.metadataUserAgent!);
+                }
+
                 if (!seriesInfo) {
                     this.logger.warn(`[METADATA] No TVDB series match for "${nfoData.title}"`);
                 } else {

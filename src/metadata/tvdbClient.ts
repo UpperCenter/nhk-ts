@@ -1,5 +1,6 @@
 import type { MetadataInfo } from './types.js';
 import { compareTwoStrings } from 'string-similarity';
+import { getHardcodedMapping } from './hardcodedMappings.js';
 
 /**
  * Authenticate with TVDB API and return a bearer token
@@ -24,7 +25,9 @@ export async function login(apiKey: string, userAgent: string): Promise<string> 
 /**
  * Searches TVDB for a series matching the given title and returns the best match
  * 
- * Prioritization logic:
+ * First checks hardcoded mappings for problematic titles, then falls back to API search.
+ * 
+ * Prioritization logic for API search:
  * 1. Prefer exact title matches from NHK World network
  * 2. Prefer higher title similarity from NHK networks  
  * 3. Fallback to any NHK-affiliated network series
@@ -40,6 +43,18 @@ export async function searchSeries(
     token: string,
     userAgent: string
 ): Promise<{ tvdb_id: string; slug: string; name: string; year: string } | null> {
+    // First check for hardcoded mappings
+    const hardcodedMapping = getHardcodedMapping(title);
+    if (hardcodedMapping) {
+        return {
+            tvdb_id: hardcodedMapping.tvdb_id,
+            slug: hardcodedMapping.slug,
+            name: hardcodedMapping.name,
+            year: hardcodedMapping.year
+        };
+    }
+
+    // Fall back to API search
     // Construct search URL with encoded title and series type filter
     const url = `https://api4.thetvdb.com/v4/search?query=${encodeURIComponent(
         title
