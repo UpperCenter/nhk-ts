@@ -302,7 +302,10 @@ export async function detectBlackBoundariesWithMagick(
         endMeans.map((_, i) => isFrameSilent(Math.round((i / FRAME_RATE) * 1000) + endWindowStartMs, silencePeriods)),
         []
     );
-    const programStart = startIdx !== null ? frameToSec(startIdx - N_CONSECUTIVE + 1) : null;
+    // Use the actual detected frame index for more accurate trimming
+    // startIdx is the last index of the consecutive sequence, so we need to go back to the first frame
+    // Add additional frame offset to ensure we cut before any content appears (3 frames earlier total)
+    const programStart = startIdx !== null ? frameToSec(startIdx - N_CONSECUTIVE + 1 - 3) : null;
     const programEnd = endIdx !== null ? duration - endWindow + frameToSec(endIdx) : null;
 
     if (programStart === null) notes.push('No valid black period found at start');

@@ -15,10 +15,16 @@ export interface HardcodedSeriesMapping {
  */
 export const HARDCODED_SERIES_MAPPINGS: Record<string, HardcodedSeriesMapping> = {
     "Yokai": {
-        tvdb_id: "405638",
-        slug: "405638-series",
-        name: "Yokai",
-        year: "2021"
+        tvdb_id: "424910",
+        slug: "424910-series",
+        name: "Time and Tide",
+        year: "2020"
+    },
+    "Lunch On": {
+        tvdb_id: "270769",
+        slug: "lunch-on",
+        name: "Lunch On",
+        year: "2013"
     },
 };
 
