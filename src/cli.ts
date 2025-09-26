@@ -31,7 +31,7 @@ program
     .option('--tvdb-api-key <key>', 'TVDB API key', process.env.TVDB_API_KEY)
     .option('--metadata-cache <path>', 'Path to metadata cache JSON', `${process.cwd()}/cache.json`)
     .option('--metadata-rate-limit <n>', 'Max TVDB requests per second', parseFloat, 1)
-    .option('--metadata-user-agent <ua>', 'User-Agent for metadata requests', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:138.0) Gecko/20100101 Firefox/138.0')
+    .option('--metadata-user-agent <ua>', 'User-Agent for metadata requests', 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0')
     .option('--transcode', 'Enable transcoding of trimmed files to selected container', false)
     .option('--preset <preset>', 'Transcode preset (ultrafast, superfast, veryfast, faster, fast, medium, slow, slower, veryslow, placebo)', 'medium')
     .option('--crf <number>', 'CRF value for quality (lower = better quality, 18-23 recommended)', '18')
