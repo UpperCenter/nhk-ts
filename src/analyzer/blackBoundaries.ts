@@ -18,7 +18,7 @@ export async function detectBlackBoundariesWithMagick(
     const MASK_X = 13, MASK_Y = 60, MASK_W = 400, MASK_H = 54;
     const SIMILARITY_THRESHOLD = 0.92;
     const N_CONSECUTIVE = 2;
-    const FRAME_RATE = 5;
+    const FRAME_RATE = 8;
     const notes: string[] = [];
     const referenceImage = options.reference || 'data/black_logo.png';
     const keepDebug = options.keepDebug;
@@ -281,6 +281,7 @@ export async function detectBlackBoundariesWithMagick(
     }
 
     const frameToSec = (idx: number | null) => idx !== null ? idx / FRAME_RATE : 0;
+    const startValidMask = startMeans.map((_, i) => isFrameSilent(Math.round((i / FRAME_RATE) * 1000), silencePeriods));
     const startIdx = findConsecutive(
         startMeans,
         SIMILARITY_THRESHOLD,
@@ -288,10 +289,11 @@ export async function detectBlackBoundariesWithMagick(
         'last',
         'START',
         logger,
-        startMeans.map((_, i) => isFrameSilent(Math.round((i / FRAME_RATE) * 1000), silencePeriods)),
+        startValidMask,
         []
     );
     const endWindowStartMs = Math.round((duration - endWindow) * 1000);
+    const endValidMask = endMeans.map((_, i) => isFrameSilent(Math.round((i / FRAME_RATE) * 1000) + endWindowStartMs, silencePeriods));
     const endIdx = findConsecutive(
         endMeans,
         SIMILARITY_THRESHOLD,
@@ -299,14 +301,32 @@ export async function detectBlackBoundariesWithMagick(
         'first',
         'END',
         logger,
-        endMeans.map((_, i) => isFrameSilent(Math.round((i / FRAME_RATE) * 1000) + endWindowStartMs, silencePeriods)),
+        endValidMask,
         []
     );
-    // Use the actual detected frame index for more accurate trimming
-    // startIdx is the last index of the consecutive sequence, so we need to go back to the first frame
-    // Add additional frame offset to ensure we cut before any content appears (3 frames earlier total)
-    const programStart = startIdx !== null ? frameToSec(startIdx - N_CONSECUTIVE + 1 - 3) : null;
-    const programEnd = endIdx !== null ? duration - endWindow + frameToSec(endIdx) : null;
+
+    // Helper: expand around an index to the full contiguous black+silence run and return midpoint index
+    const findRunMidpoint = (
+        means: number[],
+        idx: number | null,
+        threshold: number,
+        validMask: boolean[]
+    ): number | null => {
+        if (idx === null) return null;
+        const isBlackAt = (i: number) => (i >= 0 && i < means.length && (1 - (means[i] ?? 1)) >= threshold);
+        let lo = idx;
+        let hi = idx;
+        while (lo - 1 >= 0 && isBlackAt(lo - 1) && validMask[lo - 1]) lo--;
+        while (hi + 1 < means.length && isBlackAt(hi + 1) && validMask[hi + 1]) hi++;
+        return Math.floor((lo + hi) / 2);
+    };
+
+    const startMidIdx = findRunMidpoint(startMeans, startIdx, SIMILARITY_THRESHOLD, startValidMask);
+    const endMidIdx = findRunMidpoint(endMeans, endIdx, SIMILARITY_THRESHOLD, endValidMask);
+
+    // Choose cut points within black+silence runs (midpoints). This guarantees BOTH conditions at the cut.
+    const programStart = startMidIdx !== null ? frameToSec(startMidIdx) : null;
+    const programEnd = endMidIdx !== null ? duration - endWindow + frameToSec(endMidIdx) : null;
 
     if (programStart === null) notes.push('No valid black period found at start');
     if (programEnd === null) notes.push('No valid black period found at end');
