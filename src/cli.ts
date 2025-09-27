@@ -37,6 +37,9 @@ program
     .option('--crf <number>', 'CRF value for quality (lower = better quality, 18-23 recommended)', '18')
     .option('--audio-copy', 'Force copy of all audio streams instead of encoding', false)
     .option('--format <format>', 'Output container format: mkv or mp4', 'mkv')
+    .option('--hw-accel <type>', 'Hardware acceleration: none, nvenc, qsv, vaapi, auto', 'none')
+    .option('--encoder <encoder>', 'Video encoder: libx264, libx265, h264_nvenc, hevc_nvenc, h264_qsv, hevc_qsv, h264_vaapi, hevc_vaapi')
+    .option('--best', 'Use best quality settings optimized for modern systems (overrides preset/crf/encoder)', false)
     .option('--delete-original', 'Delete original .ts and .nfo files after successful processing', false);
 
 program.parse();
@@ -83,6 +86,9 @@ if (process.argv.length <= 2) {
         ['CRF', String(options.crf)],
         ['Audio Copy', String(options.audioCopy)],
         ['Format', options.format],
+        ['Hardware Acceleration', options.hwAccel || 'none'],
+        ['Video Encoder', options.encoder || 'auto'],
+        ['Best Quality Mode', String(options.best)],
     ], ['Option', 'Value']);
     logger.info('');
 
@@ -93,12 +99,33 @@ if (process.argv.length <= 2) {
         process.exit(1);
     }
 
-    // Validate preset
+    // Validate preset and hardware acceleration options
     if (options.transcode) {
         const validPresets = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'];
         if (!validPresets.includes(options.preset)) {
             console.error(chalk.red(`Invalid preset: ${options.preset}. Valid options: ${validPresets.join(', ')}`));
             process.exit(1);
+        }
+
+        const validHwAccel = ['none', 'nvenc', 'qsv', 'vaapi', 'auto'];
+        if (options.hwAccel && !validHwAccel.includes(options.hwAccel)) {
+            console.error(chalk.red(`Invalid hardware acceleration: ${options.hwAccel}. Valid options: ${validHwAccel.join(', ')}`));
+            process.exit(1);
+        }
+
+        const validEncoders = ['libx264', 'libx265', 'h264_nvenc', 'hevc_nvenc', 'h264_qsv', 'hevc_qsv', 'h264_vaapi', 'hevc_vaapi'];
+        if (options.encoder && !validEncoders.includes(options.encoder)) {
+            console.error(chalk.red(`Invalid encoder: ${options.encoder}. Valid options: ${validEncoders.join(', ')}`));
+            process.exit(1);
+        }
+
+        // Apply --best flag settings
+        if (options.best) {
+            logger.info(chalk.cyan('Best quality mode enabled - optimizing settings for modern systems...'));
+            // Override settings for best quality with hardware acceleration
+            if (!options.encoder) {
+                options.hwAccel = options.hwAccel || 'auto';
+            }
         }
     }
 

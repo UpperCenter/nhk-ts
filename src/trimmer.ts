@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { Logger } from './logger.js';
 import { ProgramOptions } from './types.js';
 import { detectBlackBoundariesWithMagick } from './analyzer/blackBoundaries.js';
-import { formatTime, askQuestion, sanitizeFilename } from './utils.js';
+import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings } from './utils.js';
 import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
 import { loadEpisodes } from './metadata/episodeService.js';
@@ -97,7 +97,10 @@ export class TVHeadEndTrimmer {
         inputFile: string,
         metaInfo?: MetadataInfo,
     ): Promise<boolean> {
-        const { preset, crf, audioCopy, format } = this.options;
+        const { audioCopy, format } = this.options;
+        // Get optimal encoding settings based on hardware and options
+        const encodingSettings = await getBestEncodingSettings(this.options);
+
         // Total duration of input for progress calculation
         const totalDuration = await this.getTotalDuration(inputFile);
         const ext = format;
@@ -117,8 +120,23 @@ export class TVHeadEndTrimmer {
         // Build ffmpeg arguments with error resilience and accurate seeking
         const args: string[] = ['-err_detect', 'ignore_err', '-ss', '0', '-i', inputFile,
             '-avoid_negative_ts', 'make_zero',
-            '-c:v', 'libx264', '-preset', preset, '-crf', crf.toString(),
-            '-vf', 'yadif=mode=0:parity=0,format=yuv420p'];
+            '-c:v', encodingSettings.encoder];
+
+        // Add preset for software encoders, or hardware-specific settings
+        if (encodingSettings.encoder.includes('nvenc')) {
+            args.push('-preset', encodingSettings.preset);
+            args.push(...encodingSettings.extraArgs);
+        } else if (encodingSettings.encoder.includes('qsv')) {
+            args.push(...encodingSettings.extraArgs);
+        } else if (encodingSettings.encoder.includes('vaapi')) {
+            args.push(...encodingSettings.extraArgs);
+        } else {
+            // Software encoder (libx264/libx265)
+            args.push('-preset', encodingSettings.preset, '-crf', encodingSettings.crf.toString());
+            args.push(...encodingSettings.extraArgs);
+        }
+
+        args.push('-vf', 'yadif=mode=0:parity=0,format=yuv420p');
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {
@@ -196,15 +214,12 @@ export class TVHeadEndTrimmer {
         metaInfo?: MetadataInfo,
         showYear?: string,
     ): Promise<boolean> {
-        const { preset, crf: userCrf, audioCopy, format } = this.options;
+        const { audioCopy, format } = this.options;
+        // Get optimal encoding settings based on hardware and options
+        const encodingSettings = await getBestEncodingSettings(this.options);
+
         // Clip duration for progress
         const clipDuration = endTime - startTime;
-        // Clamp CRF to avoid low quality
-        let crfVal = userCrf;
-        if (crfVal > 23) {
-            this.logger.warn(`CRF ${crfVal} is too high, clamping to 23 for quality`);
-            crfVal = 23;
-        }
         const ext = format;
         const dir = path.dirname(inputFile);
         // Build filename from metadata or base name
@@ -229,8 +244,23 @@ export class TVHeadEndTrimmer {
         const duration = endTime - startTime;
         const args: string[] = ['-err_detect', 'ignore_err', '-ss', startTime.toString(), '-i', inputFile, '-t', duration.toString(),
             '-avoid_negative_ts', 'make_zero',
-            '-c:v', 'libx264', '-preset', preset, '-crf', crfVal.toString(),
-            '-vf', 'yadif=mode=0:parity=0,format=yuv420p'];
+            '-c:v', encodingSettings.encoder];
+
+        // Add preset for software encoders, or hardware-specific settings
+        if (encodingSettings.encoder.includes('nvenc')) {
+            args.push('-preset', encodingSettings.preset);
+            args.push(...encodingSettings.extraArgs);
+        } else if (encodingSettings.encoder.includes('qsv')) {
+            args.push(...encodingSettings.extraArgs);
+        } else if (encodingSettings.encoder.includes('vaapi')) {
+            args.push(...encodingSettings.extraArgs);
+        } else {
+            // Software encoder (libx264/libx265)
+            args.push('-preset', encodingSettings.preset, '-crf', encodingSettings.crf.toString());
+            args.push(...encodingSettings.extraArgs);
+        }
+
+        args.push('-vf', 'yadif=mode=0:parity=0,format=yuv420p');
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {

@@ -26,10 +26,13 @@ export interface ProgramOptions {
     metadataUserAgent?: string;
     deleteOriginal: boolean;
     transcode: boolean;
-    preset: 'medium' | 'slow';
+    preset: 'ultrafast' | 'superfast' | 'veryfast' | 'faster' | 'fast' | 'medium' | 'slow' | 'slower' | 'veryslow' | 'placebo';
     crf: number;
     audioCopy: boolean;
     format: 'mkv' | 'mp4';
+    hwAccel?: 'none' | 'nvenc' | 'qsv' | 'vaapi' | 'auto';
+    best?: boolean;
+    encoder?: 'libx264' | 'libx265' | 'h264_nvenc' | 'hevc_nvenc' | 'h264_qsv' | 'hevc_qsv' | 'h264_vaapi' | 'hevc_vaapi';
 }
 
 export interface NfoData {
