@@ -23,7 +23,10 @@ export class TVHeadEndTrimmer {
      */
     constructor(options: ProgramOptions) {
         this.options = options;
-        this.logger = new Logger(options.verbosity, options.quiet);
+        this.logger = new Logger({
+            verbosity: options.verbosity,
+            quiet: options.quiet
+        });
     }
 
     private async executeTrimCommand(
@@ -363,8 +366,9 @@ export class TVHeadEndTrimmer {
         fullPath: string;
         size: number;
     }): Promise<boolean> {
-        this.logger.section(`Processing: ${file.name}`);
-        this.logger.info(chalk.gray(`File size: ${Math.round((file.size / (1024 * 1024)) * 10) / 10} MiB`));
+        this.logger.section(`Processing: ${file.name}`, () => {
+            this.logger.info(`File size: ${this.logger.formatFileSize(file.size)}`);
+        });
 
         const magickResult = await detectBlackBoundariesWithMagick(file.fullPath, this.options, this.logger);
         const totalDuration = await this.getTotalDuration(file.fullPath);
@@ -391,7 +395,7 @@ export class TVHeadEndTrimmer {
                     const reStr = escaped.replace(/\*/g, '.*');
                     const regex = new RegExp(`^${reStr}$`, 'i');
                     if (regex.test(title)) {
-                        this.logger.warn(`[METADATA] Title "${title}" matches blacklist pattern "${pattern}"; skipping metadata lookup`);
+                        this.logger.warning(`[METADATA] Title "${title}" matches blacklist pattern "${pattern}"; skipping metadata lookup`);
                         skipMetadata = true;
                         break;
                     }
@@ -403,7 +407,7 @@ export class TVHeadEndTrimmer {
             if (skipMetadata) {
                 this.logger.info('[METADATA] Metadata lookup skipped due to blacklist');
             } else if (!this.options.tvdbApiKey) {
-                this.logger.warn('[METADATA] TVDB API key missing; skipping metadata lookup');
+                this.logger.warning('[METADATA] TVDB API key missing; skipping metadata lookup');
             } else {
                 this.logger.info('[METADATA] Searching TVDB for series information');
 
@@ -424,7 +428,7 @@ export class TVHeadEndTrimmer {
                 }
 
                 if (!seriesInfo) {
-                    this.logger.warn(`[METADATA] No TVDB series match for "${nfoData.title}"`);
+                    this.logger.warning(`[METADATA] No TVDB series match for "${nfoData.title}"`);
                 } else {
                     this.logger.info(`[METADATA] Found series: ${seriesInfo.name} (ID: ${seriesInfo.tvdb_id})`);
                     // Load episodes (will log cache vs fetch)
@@ -433,7 +437,7 @@ export class TVHeadEndTrimmer {
                     this.logger.info('[METADATA] Attempting to match episode by description');
                     const epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
                     if (!epMatch) {
-                        this.logger.warn('[METADATA] No episode match by description; using fallback naming');
+                        this.logger.warning('[METADATA] No episode match by description; using fallback naming');
                     } else {
                         this.logger.success(`[METADATA] Matched episode S${epMatch.season}E${epMatch.episodeNumber}: ${epMatch.name}`);
                         metaInfo = {
@@ -455,9 +459,10 @@ export class TVHeadEndTrimmer {
             return false;
         }
 
-        this.logger.info(chalk.yellow('\nAnalysis Results (Magick):'));
-        magickResult.notes.forEach((note) => {
-            this.logger.info(chalk.gray(`  Note: ${note}`));
+        this.logger.section('Analysis Results', () => {
+            magickResult.notes.forEach((note) => {
+                this.logger.info(note);
+            });
         });
 
         // Determine output filename
@@ -489,17 +494,21 @@ export class TVHeadEndTrimmer {
         const safeName = sanitizeFilename(outputFileName);
         const outputFile = path.join(this.options.output, safeName);
 
-        this.logger.info(chalk.green('\nRecommended trim points:'));
-        this.logger.info(chalk.white(`  Start: ${magickResult.programStart}s`));
-        this.logger.info(chalk.white(`  End: ${magickResult.programEnd}s`));
-
         const beforeDuration = totalDuration;
-        const afterDuration = magickResult.programEnd - magickResult.programStart;
         const beforeSize = Math.round((file.size / (1024 * 1024)) * 10) / 10;
-        this.logger.table([
-            [formatTime(0), formatTime(beforeDuration), beforeSize + ' MiB'],
-            [formatTime(magickResult.programStart), formatTime(magickResult.programEnd), 'N/A']
-        ], ['Start', 'End', 'File Size']);
+
+        this.logger.section('Recommended Trim Points', () => {
+            this.logger.keyValue([
+                { key: 'Start', value: `${magickResult.programStart || 0}s` },
+                { key: 'End', value: `${magickResult.programEnd || 0}s` },
+                { key: 'Duration', value: this.logger.formatDuration((magickResult.programEnd || 0) - (magickResult.programStart || 0)) }
+            ]);
+
+            this.logger.table([
+                [formatTime(0), formatTime(beforeDuration), beforeSize + ' MiB'],
+                [formatTime(magickResult.programStart || 0), formatTime(magickResult.programEnd || 0), 'N/A']
+            ], ['Start', 'End', 'File Size'], 'File Comparison');
+        });
 
         let success: boolean;
         if (this.options.transcode) {
@@ -544,7 +553,7 @@ export class TVHeadEndTrimmer {
                 await fs.unlink(nfoPath);
                 this.logger.info(`Deleted NFO file: ${nfoPath}`);
             } catch (err) {
-                this.logger.warn(`Failed to delete original files: ${err}`);
+                this.logger.warning(`Failed to delete original files: ${err}`);
             }
         }
         return success;
@@ -552,7 +561,7 @@ export class TVHeadEndTrimmer {
 
     public async run(): Promise<void> {
         if (this.options.test) {
-            this.logger.warn('RUNNING IN TEST MODE - No files will be modified');
+            this.logger.warning('RUNNING IN TEST MODE - No files will be modified');
         }
 
         // Ensure output directory exists
@@ -572,7 +581,9 @@ export class TVHeadEndTrimmer {
                         size: stats.size,
                     },
                 ];
-                this.logger.info(chalk.cyan(`Processing single file: ${this.options.file}`));
+                this.logger.section('File Processing', () => {
+                    this.logger.info(`Processing single file: ${this.options.file}`);
+                });
             } catch (error) {
                 this.logger.error(`File not found: ${this.options.file}`);
                 process.exit(1);
@@ -582,8 +593,10 @@ export class TVHeadEndTrimmer {
                 // Recursively discover .ts files
                 const tsFiles = await this.collectTsFiles(this.options.input);
                 files.push(...tsFiles);
-                this.logger.info(chalk.cyan(`Processing directory (recursive): ${this.options.input}`));
-                this.logger.info(chalk.gray(`Found ${files.length} .ts files`));
+                this.logger.section('File Discovery', () => {
+                    this.logger.info(`Processing directory (recursive): ${this.options.input}`);
+                    this.logger.success(`Found ${files.length} .ts files`);
+                });
             } catch (error) {
                 this.logger.error(`Error reading directory recursively: ${error}`);
                 process.exit(1);
@@ -613,17 +626,19 @@ export class TVHeadEndTrimmer {
             }
         }
 
-        this.logger.section('Analysis complete!');
-        this.logger.info(chalk.magenta(`Processed ${files.length} file(s)`));
-        this.logger.table(summaryRows, ['File', 'Status']);
+        this.logger.section('Processing Complete', () => {
+            this.logger.success(`Processed ${files.length} file(s)`);
+            this.logger.table(summaryRows, ['File', 'Status'], 'Summary');
 
-        if (failedFiles.length > 0) {
-            this.logger.error('Some files failed to process:');
-            failedFiles.forEach(f => this.logger.error(`  - ${f}`));
-        }
-        if (this.options.test) {
-            this.logger.warn('Run without --test-mode to perform actual trimming');
-        }
+            if (failedFiles.length > 0) {
+                this.logger.warning(`Some files failed to process (${failedFiles.length}):`);
+                failedFiles.forEach(f => this.logger.error(`  - ${f}`));
+            }
+
+            if (this.options.test) {
+                this.logger.warning('Run without --test to perform actual trimming');
+            }
+        });
     }
 
     /**

@@ -51,46 +51,52 @@ if (process.argv.length <= 2) {
 
 (async () => {
     const options = program.opts() as ProgramOptions;
-    const logger = new Logger(options.verbosity, options.quiet);
+    const logger = new Logger({
+        verbosity: options.verbosity,
+        quiet: options.quiet
+    });
 
-    logger.section('NHK TVHeadEnd Recording Trimmer');
-    logger.info(chalk.bold(`Version: ${program.version()}`));
-    logger.info(chalk.gray('https://github.com/UpperCenter/nhk-ts'));
-    logger.info('');
-    logger.info('Important: This tool is in ALPHA and uses a lot of CPU/RAM. Use at your own risk.');
-    logger.info('');
-    logger.info(chalk.cyan('Configuration:'));
-    logger.table([
-        ['Input', options.input],
-        ['File', options.file || '(all .ts in input)'],
-        ['Output Directory', options.output],
-        ['Min Black Duration', String(options.minBlack)],
-        ['Pixel Threshold', String(options.pixThreshold)],
-        ['Reference Image', options.reference],
-        ['Keep Debug', String(options.keepDebug)],
-        ['Start Window', String(options.startWindow)],
-        ['End Window', String(options.endWindow)],
-        ['Parallelism', String(options.parallelism)],
-        ['Verbosity', options.verbosity],
-        ['Quiet', String(options.quiet)],
-        ['Test Mode', String(options.test)],
-        ['Auto-Confirm', String(options.yes)],
-        ['Metadata Lookup', String(options.metadata)],
-        ['TVDB API Key', options.tvdbApiKey || '(none)'],
-        ['Metadata Cache', options.metadataCache || '(none)'],
-        ['Metadata Rate Limit', String(options.metadataRateLimit)],
-        ['Metadata User-Agent', options.metadataUserAgent || '(none)'],
-        ['Delete Originals', String(options.deleteOriginal)],
-        ['Transcode', String(options.transcode)],
-        ['Preset', options.preset],
-        ['CRF', String(options.crf)],
-        ['Audio Copy', String(options.audioCopy)],
-        ['Format', options.format],
-        ['Hardware Acceleration', options.hwAccel || 'none'],
-        ['Video Encoder', options.encoder || 'auto'],
-        ['Best Quality Mode', String(options.best)],
-    ], ['Option', 'Value']);
-    logger.info('');
+    // Enhanced header with charm.sh styling
+    logger.section('NHK TVHeadEnd Recording Trimmer', () => {
+        logger.info(`Version: ${program.version()}`);
+        logger.info('https://github.com/UpperCenter/nhk-ts');
+        logger.newline();
+        logger.warning('This tool is in ALPHA and uses a lot of CPU/RAM. Use at your own risk.');
+    });
+
+    // Configuration display
+    const config = {
+        'Input': options.input,
+        'File': options.file || '(all .ts in input)',
+        'Output Directory': options.output,
+        'Min Black Duration': `${options.minBlack}s`,
+        'Pixel Threshold': options.pixThreshold.toString(),
+        'Reference Image': options.reference,
+        'Keep Debug': options.keepDebug.toString(),
+        'Start Window': `${options.startWindow}s`,
+        'End Window': `${options.endWindow}s`,
+        'Parallelism': (options.parallelism || 12).toString(),
+        'Verbosity': options.verbosity,
+        'Quiet': options.quiet.toString(),
+        'Test Mode': options.test.toString(),
+        'Auto-Confirm': options.yes.toString(),
+        'Metadata Lookup': options.metadata.toString(),
+        'TVDB API Key': options.tvdbApiKey ? '••••••••' : '(none)',
+        'Metadata Cache': options.metadataCache || '(none)',
+        'Metadata Rate Limit': `${options.metadataRateLimit}/s`,
+        'Delete Originals': options.deleteOriginal.toString(),
+        'Transcode': options.transcode.toString(),
+        'Preset': options.preset,
+        'CRF': options.crf.toString(),
+        'Audio Copy': options.audioCopy.toString(),
+        'Format': options.format,
+        'Hardware Acceleration': options.hwAccel || 'none',
+        'Video Encoder': options.encoder || 'auto',
+        'Best Quality Mode': (options.best || false).toString(),
+    };
+
+    logger.config(config);
+    logger.newline();
 
     try {
         await checkDependencies();

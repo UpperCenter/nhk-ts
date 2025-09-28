@@ -276,7 +276,7 @@ export async function detectBlackBoundariesWithMagick(
                 }
             }
         }
-        logger.warn(`[${label}] No run of ${n} consecutive frames above threshold (${threshold}) and silent found.`);
+        logger.warning(`[${label}] No run of ${n} consecutive frames above threshold (${threshold}) and silent found.`);
         return null;
     }
 
