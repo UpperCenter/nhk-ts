@@ -590,19 +590,31 @@ export class TVHeadEndTrimmer {
         }
 
         if (shouldDelete) {
+            // Delete .ts file
             try {
-                // Delete .ts file
                 await fs.unlink(file.fullPath);
                 this.logger.success(`Deleted original file: ${file.fullPath}`);
-                // Delete .nfo file
+            } catch (err) {
+                this.logger.warning(`Failed to delete .ts file: ${err}`);
+            }
+
+            // Delete .nfo file
+            try {
                 const dir = path.dirname(file.fullPath);
                 const base = path.basename(file.fullPath, '.ts');
                 const corrected = base.endsWith('_') ? base.slice(0, -1) : base;
                 const nfoPath = path.join(dir, `${corrected}.nfo`);
-                await fs.unlink(nfoPath);
-                this.logger.success(`Deleted NFO file: ${nfoPath}`);
+
+                // Check if .nfo file exists before trying to delete it
+                try {
+                    await fs.access(nfoPath);
+                    await fs.unlink(nfoPath);
+                    this.logger.success(`Deleted NFO file: ${nfoPath}`);
+                } catch (accessErr) {
+                    this.logger.info(`NFO file not found (skipping): ${nfoPath}`);
+                }
             } catch (err) {
-                this.logger.warning(`Failed to delete original files: ${err}`);
+                this.logger.warning(`Failed to delete NFO file: ${err}`);
             }
         } else if (this.options.deleteOriginal && !this.options.test) {
             // Log why we're not deleting
