@@ -314,11 +314,6 @@ export class TVHeadEndTrimmer {
             const stats = await fs.stat(outputPath);
             const size = Math.round((stats.size / (1024 * 1024)) * 10) / 10;
             this.logger.success(`Successfully created: ${outputPath} (${size} MiB)`);
-            // Delete original if requested
-            if (this.options.deleteOriginal && !this.options.test) {
-                await fs.unlink(inputFile);
-                this.logger.info(`Deleted original file: ${inputFile}`);
-            }
             return true;
         } catch (err) {
             this.logger.error(`Error during trim+transcode: ${err}`);
@@ -378,11 +373,12 @@ export class TVHeadEndTrimmer {
         let seriesInfo: { tvdb_id: string; slug: string; name: string; year: string } | null = null;
         let episodes: EpisodeMetadata[] = [];
         let metaInfo: MetadataInfo | undefined;
+        let skipMetadata = false;
+
         if (this.options.metadata) {
             nfoData = await parseNfo(file.fullPath, this.logger);
             this.logger.info(`[METADATA] Parsed NFO: title="${nfoData.title}", date=${nfoData.date}`);
             // Check blacklist patterns (supports '*' wildcards)
-            let skipMetadata = false;
             try {
                 const rawList = await fs.readFile(path.resolve(process.cwd(), 'blacklist.json'), 'utf-8');
                 const blacklist = JSON.parse(rawList) as string[];
@@ -510,6 +506,35 @@ export class TVHeadEndTrimmer {
             ], ['Start', 'End', 'File Size'], 'File Comparison');
         });
 
+        // Track which operations were requested and completed
+        const operations = {
+            metadata: this.options.metadata,
+            trimming: true, // Always performed
+            transcoding: this.options.transcode
+        };
+
+        const completedOperations = {
+            metadata: false,
+            trimming: false,
+            transcoding: false
+        };
+
+        // Check if metadata was successfully completed
+        if (this.options.metadata) {
+            // Metadata is considered successful if we have nfoData and either:
+            // 1. We successfully found series info and episodes, OR
+            // 2. We skipped due to blacklist (which is intentional), OR
+            // 3. We skipped due to missing API key (which is intentional)
+            completedOperations.metadata = !!nfoData && (
+                !!seriesInfo ||
+                skipMetadata ||
+                !this.options.tvdbApiKey
+            );
+        } else {
+            // If metadata wasn't requested, consider it "completed"
+            completedOperations.metadata = true;
+        }
+
         let success: boolean;
         if (this.options.transcode) {
             success = await this.executeTrimTranscodeCommand(
@@ -519,6 +544,8 @@ export class TVHeadEndTrimmer {
                 metaInfo,
                 seriesInfo?.year,
             );
+            completedOperations.trimming = success;
+            completedOperations.transcoding = success;
         } else {
             success = await this.executeTrimCommand(
                 file.fullPath,
@@ -526,6 +553,9 @@ export class TVHeadEndTrimmer {
                 magickResult.programEnd,
                 outputFile,
             );
+            completedOperations.trimming = success;
+            // If transcoding wasn't requested, consider it "completed"
+            completedOperations.transcoding = true;
         }
 
         if (success && !this.options.test) {
@@ -539,21 +569,50 @@ export class TVHeadEndTrimmer {
             ], ['Start', 'End', 'File Size']);
         }
 
-        // Optionally delete original files
-        if (success && !this.options.test && this.options.deleteOriginal) {
+        // Enhanced delete logic: only delete if ALL requested operations completed successfully
+        const shouldDelete = this.options.deleteOriginal &&
+            !this.options.test &&
+            success &&
+            Object.keys(operations).every(op =>
+                !operations[op as keyof typeof operations] ||
+                completedOperations[op as keyof typeof completedOperations]
+            );
+
+        if (this.options.deleteOriginal && !this.options.test) {
+            // Log operation status for transparency
+            const requestedOps = Object.keys(operations).filter(op => operations[op as keyof typeof operations]);
+            const completedOps = Object.keys(completedOperations).filter(op =>
+                operations[op as keyof typeof operations] &&
+                completedOperations[op as keyof typeof completedOperations]
+            );
+
+            this.logger.info(`Delete check: Requested operations: ${requestedOps.join(', ')}, Completed: ${completedOps.join(', ')}`);
+        }
+
+        if (shouldDelete) {
             try {
                 // Delete .ts file
                 await fs.unlink(file.fullPath);
-                this.logger.info(`Deleted original file: ${file.fullPath}`);
+                this.logger.success(`Deleted original file: ${file.fullPath}`);
                 // Delete .nfo file
                 const dir = path.dirname(file.fullPath);
                 const base = path.basename(file.fullPath, '.ts');
                 const corrected = base.endsWith('_') ? base.slice(0, -1) : base;
                 const nfoPath = path.join(dir, `${corrected}.nfo`);
                 await fs.unlink(nfoPath);
-                this.logger.info(`Deleted NFO file: ${nfoPath}`);
+                this.logger.success(`Deleted NFO file: ${nfoPath}`);
             } catch (err) {
                 this.logger.warning(`Failed to delete original files: ${err}`);
+            }
+        } else if (this.options.deleteOriginal && !this.options.test) {
+            // Log why we're not deleting
+            const failedOps = Object.keys(operations).filter(op =>
+                operations[op as keyof typeof operations] &&
+                !completedOperations[op as keyof typeof completedOperations]
+            );
+
+            if (failedOps.length > 0) {
+                this.logger.warning(`Skipping deletion of original files due to failed operations: ${failedOps.join(', ')}`);
             }
         }
         return success;

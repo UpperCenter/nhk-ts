@@ -40,7 +40,7 @@ program
     .option('--hw-accel <type>', 'Hardware acceleration: none, nvenc, qsv, vaapi, auto', 'none')
     .option('--encoder <encoder>', 'Video encoder: libx264, libx265, h264_nvenc, hevc_nvenc, h264_qsv, hevc_qsv, h264_vaapi, hevc_vaapi')
     .option('--best', 'Use best quality settings optimized for modern systems (overrides preset/crf/encoder)', false)
-    .option('--delete-original', 'Delete original .ts and .nfo files after successful processing', false);
+    .option('--delete-original', 'Delete original .ts and .nfo files only if ALL requested operations (metadata, trimming, transcoding) complete successfully', false);
 
 program.parse();
 
