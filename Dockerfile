@@ -58,6 +58,10 @@ RUN pacman -Syu --noconfirm && \
     less && \
     pacman -Scc --noconfirm
 
+# Install NVIDIA Container Toolkit components (for GPU support)
+# Note: The actual NVIDIA drivers and libraries will be mounted from the host
+RUN mkdir -p /usr/local/nvidia/bin /usr/local/nvidia/lib64
+
 RUN groupadd -g 1000 nhk && useradd -r -u 1000 -g nhk nhk
 
 WORKDIR /app
@@ -76,6 +80,12 @@ ENV NODE_ENV=production
 ENV TERM=xterm-256color
 ENV COLORTERM=truecolor
 ENV FORCE_COLOR=1
+
+# NVIDIA GPU support environment variables
+ENV NVIDIA_VISIBLE_DEVICES=all
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+ENV PATH=/usr/local/nvidia/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}
 
 VOLUME ["/input", "/output", "/cache"]
 
