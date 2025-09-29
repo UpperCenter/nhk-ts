@@ -522,11 +522,11 @@ export class TVHeadEndTrimmer {
         // Check if metadata was successfully completed
         if (this.options.metadata) {
             // Metadata is considered successful if we have nfoData and either:
-            // 1. We successfully found series info and episodes, OR
+            // 1. We successfully found episode information (metaInfo), OR
             // 2. We skipped due to blacklist (which is intentional), OR
             // 3. We skipped due to missing API key (which is intentional)
             completedOperations.metadata = !!nfoData && (
-                !!seriesInfo ||
+                !!metaInfo ||
                 skipMetadata ||
                 !this.options.tvdbApiKey
             );
@@ -578,7 +578,7 @@ export class TVHeadEndTrimmer {
                 completedOperations[op as keyof typeof completedOperations]
             );
 
-        if (this.options.deleteOriginal && !this.options.test) {
+        if (shouldDelete) {
             // Log operation status for transparency
             const requestedOps = Object.keys(operations).filter(op => operations[op as keyof typeof operations]);
             const completedOps = Object.keys(completedOperations).filter(op =>
@@ -587,9 +587,6 @@ export class TVHeadEndTrimmer {
             );
 
             this.logger.info(`Delete check: Requested operations: ${requestedOps.join(', ')}, Completed: ${completedOps.join(', ')}`);
-        }
-
-        if (shouldDelete) {
             // Delete .ts file
             try {
                 await fs.unlink(file.fullPath);
@@ -617,11 +614,18 @@ export class TVHeadEndTrimmer {
                 this.logger.warning(`Failed to delete NFO file: ${err}`);
             }
         } else if (this.options.deleteOriginal && !this.options.test) {
-            // Log why we're not deleting
+            // Log operation status and why we're not deleting
+            const requestedOps = Object.keys(operations).filter(op => operations[op as keyof typeof operations]);
+            const completedOps = Object.keys(completedOperations).filter(op =>
+                operations[op as keyof typeof operations] &&
+                completedOperations[op as keyof typeof completedOperations]
+            );
             const failedOps = Object.keys(operations).filter(op =>
                 operations[op as keyof typeof operations] &&
                 !completedOperations[op as keyof typeof completedOperations]
             );
+
+            this.logger.info(`Delete check: Requested operations: ${requestedOps.join(', ')}, Completed: ${completedOps.join(', ')}`);
 
             if (failedOps.length > 0) {
                 this.logger.warning(`Skipping deletion of original files due to failed operations: ${failedOps.join(', ')}`);
