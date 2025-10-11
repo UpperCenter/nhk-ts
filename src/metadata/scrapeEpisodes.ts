@@ -41,7 +41,11 @@ export async function retrieveEpisodeList(
             const name = nameText.trim();
             const dateText = $(li).find('ul.list-inline.text-muted li').first().text() ?? '';
             const rawDate = dateText.trim();
-            const firstAired = new Date(rawDate).toISOString().split('T')[0];
+            const firstAired = (() => {
+                if (!rawDate) return '';
+                const date = new Date(rawDate);
+                return isNaN(date.getTime()) ? '' : date.toISOString().split('T')[0];
+            })();
             const overviewText = $(li).find('.list-group-item-text p').text() ?? '';
             const overview = overviewText.trim().replace(/\s+/g, ' ');
             episodes.push({ id, season, episodeNumber, name, overview, firstAired } as EpisodeMetadata);
