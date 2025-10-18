@@ -139,7 +139,7 @@ export class TVHeadEndTrimmer {
             args.push(...encodingSettings.extraArgs);
         }
 
-        args.push('-vf', 'yadif=mode=0:parity=0,format=yuv420p');
+        args.push('-vf', 'bwdif=mode=0:parity=auto,format=yuv420p');
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {
@@ -263,7 +263,7 @@ export class TVHeadEndTrimmer {
             args.push(...encodingSettings.extraArgs);
         }
 
-        args.push('-vf', 'yadif=mode=0:parity=0,format=yuv420p');
+        args.push('-vf', 'bwdif=mode=0:parity=auto,format=yuv420p');
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {

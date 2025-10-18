@@ -111,7 +111,7 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
         if (availableEncoders.includes('hevc_nvenc')) {
             return {
                 encoder: 'hevc_nvenc',
-                preset: 'p7',         // NVENC preset p7 (highest quality)
+                preset: 'p5',         // NVENC preset p5 (balanced quality/speed)
                 crf: 18,              // Lower CRF for better quality
                 extraArgs: [
                     '-profile:v', 'main',
@@ -135,7 +135,7 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
         if (availableEncoders.includes('h264_nvenc')) {
             return {
                 encoder: 'h264_nvenc',
-                preset: 'p7',
+                preset: 'p5',
                 crf: 18,
                 extraArgs: [
                     '-profile:v', 'high',
@@ -201,7 +201,7 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
         if (availableEncoders.includes('h264_nvenc')) {
             return {
                 encoder: 'h264_nvenc',
-                preset: 'p4',  // Balanced preset for auto mode
+                preset: 'p5',  // Balanced preset for auto mode
                 crf: options.crf,
                 extraArgs: [
                     '-rc', 'vbr',
