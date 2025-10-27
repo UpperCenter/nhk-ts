@@ -365,10 +365,7 @@ export class TVHeadEndTrimmer {
             this.logger.info(`File size: ${this.logger.formatFileSize(file.size)}`);
         });
 
-        const magickResult = await detectBlackBoundariesWithMagick(file.fullPath, this.options, this.logger);
-        const totalDuration = await this.getTotalDuration(file.fullPath);
-
-        // Metadata lookup
+        // Metadata lookup (moved before video analysis)
         let nfoData: NfoData | undefined;
         let seriesInfo: { tvdb_id: string; slug: string; name: string; year: string } | null = null;
         let episodes: EpisodeMetadata[] = [];
@@ -425,6 +422,9 @@ export class TVHeadEndTrimmer {
 
                 if (!seriesInfo) {
                     this.logger.warning(`[METADATA] No TVDB series match for "${nfoData.title}"`);
+                    // Early exit if metadata lookup fails to find a series
+                    this.logger.error('[METADATA] Skipping file due to failed metadata lookup (no series match)');
+                    return false;
                 } else {
                     this.logger.info(`[METADATA] Found series: ${seriesInfo.name} (ID: ${seriesInfo.tvdb_id})`);
                     // Load episodes (will log cache vs fetch)
@@ -433,7 +433,9 @@ export class TVHeadEndTrimmer {
                     this.logger.info('[METADATA] Attempting to match episode by description');
                     const epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
                     if (!epMatch) {
-                        this.logger.warning('[METADATA] No episode match by description; using fallback naming');
+                        this.logger.warning('[METADATA] No episode match by description');
+                        this.logger.error('[METADATA] Skipping file due to failed episode match');
+                        return false;
                     } else {
                         this.logger.success(`[METADATA] Matched episode S${epMatch.season}E${epMatch.episodeNumber}: ${epMatch.name}`);
                         metaInfo = {
@@ -448,6 +450,10 @@ export class TVHeadEndTrimmer {
                 }
             }
         }
+
+        // Only reach expensive video analysis if metadata checks passed or were skipped
+        const magickResult = await detectBlackBoundariesWithMagick(file.fullPath, this.options, this.logger);
+        const totalDuration = await this.getTotalDuration(file.fullPath);
 
         if (magickResult.programStart === null || magickResult.programEnd === null) {
             this.logger.error('\nSkipping: No usable Magick-based detection results');
