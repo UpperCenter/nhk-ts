@@ -57,6 +57,21 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Remove NHK recording timestamp suffix from a base filename.
+ * Supports both legacy trailing underscore and new `_YYYY-MM-DD_HH:MM:SS` suffix.
+ */
+export function stripNHKTimestampSuffix(base: string): string {
+    // Handle legacy trailing underscore
+    let name = base.endsWith('_') ? base.slice(0, -1) : base;
+    // Remove new timestamp suffix pattern: _YYYY-MM-DD_HH:MM:SS at end of string
+    const timestampPattern = /_\d{4}-\d{2}-\d{2}_\d{2}:\d{2}:\d{2}$/;
+    if (timestampPattern.test(name)) {
+        name = name.replace(timestampPattern, '');
+    }
+    return name;
+}
+
+/**
  * Quote a single argument for safe display in a POSIX shell command line.
  * Uses double quotes and escapes embedded characters that would break parsing.
  */

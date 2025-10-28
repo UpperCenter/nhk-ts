@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { Logger } from './logger.js';
 import { ProgramOptions } from './types.js';
 import { detectBlackBoundariesWithMagick } from './analyzer/blackBoundaries.js';
-import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings, formatCommand } from './utils.js';
+import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings, formatCommand, stripNHKTimestampSuffix } from './utils.js';
 import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
 import { loadEpisodes } from './metadata/episodeService.js';
@@ -236,8 +236,8 @@ export class TVHeadEndTrimmer {
             episode = String(metaInfo.episodeNumber).padStart(2, '0');
             filename = `${metaInfo.seriesName} (${year}) - S${season}E${episode} - ${metaInfo.episodeName}.${ext}`;
         } else {
-            // Remove trailing underscore to match processRecording logic
-            const baseName = rawBase.endsWith('_') ? rawBase.slice(0, -1) : rawBase;
+            // Preserve timestamp in base name for uniqueness
+            const baseName = rawBase;
             filename = `${baseName}.${ext}`;
         }
         const safeName = sanitizeFilename(filename);
@@ -469,7 +469,8 @@ export class TVHeadEndTrimmer {
 
         // Determine output filename
         const rawBase = path.parse(file.name).name;
-        const baseName = rawBase.endsWith('_') ? rawBase.slice(0, -1) : rawBase;
+        // Preserve timestamp in base name for uniqueness
+        const baseName = rawBase;
         let outputFileName: string;
         if (this.options.transcode) {
             // When transcoding, use the appropriate extension
@@ -605,16 +606,27 @@ export class TVHeadEndTrimmer {
             try {
                 const dir = path.dirname(file.fullPath);
                 const base = path.basename(file.fullPath, '.ts');
-                const corrected = base.endsWith('_') ? base.slice(0, -1) : base;
-                const nfoPath = path.join(dir, `${corrected}.nfo`);
-
-                // Check if .nfo file exists before trying to delete it
-                try {
-                    await fs.access(nfoPath);
-                    await fs.unlink(nfoPath);
-                    this.logger.success(`Deleted NFO file: ${nfoPath}`);
-                } catch (accessErr) {
-                    this.logger.info(`NFO file not found (skipping): ${nfoPath}`);
+                // Prefer exact timestamped NFO, fall back to legacy names
+                const candidates: string[] = [
+                    path.join(dir, `${base}.nfo`),
+                    path.join(dir, `${base.endsWith('_') ? base.slice(0, -1) : base}.nfo`),
+                ];
+                const stripped = stripNHKTimestampSuffix(base);
+                if (!candidates.some(p => p.endsWith(`${stripped}.nfo`))) {
+                    candidates.push(path.join(dir, `${stripped}.nfo`));
+                }
+                let deleted = false;
+                for (const c of candidates) {
+                    try {
+                        await fs.access(c);
+                        await fs.unlink(c);
+                        this.logger.success(`Deleted NFO file: ${c}`);
+                        deleted = true;
+                        break;
+                    } catch {}
+                }
+                if (!deleted) {
+                    this.logger.info(`NFO file not found (skipping): ${path.join(dir, `${base}.nfo`)}`);
                 }
             } catch (err) {
                 this.logger.warning(`Failed to delete NFO file: ${err}`);
