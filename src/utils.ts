@@ -57,6 +57,25 @@ export function sanitizeFilename(name: string): string {
 }
 
 /**
+ * Quote a single argument for safe display in a POSIX shell command line.
+ * Uses double quotes and escapes embedded characters that would break parsing.
+ */
+export function quoteShellArg(arg: string): string {
+    // If no spaces or special chars, return as-is for readability
+    if (!/[\s'"$`\\]/.test(arg)) return arg;
+    // Escape backslashes, double quotes, dollar, backtick inside double quotes
+    const escaped = arg.replace(/["\\$`]/g, (m) => `\\${m}`);
+    return `"${escaped}"`;
+}
+
+/**
+ * Format a command with args for logging in a copy/paste-safe way.
+ */
+export function formatCommand(cmd: string, args: string[]): string {
+    return [cmd, ...args.map(quoteShellArg)].join(' ');
+}
+
+/**
  * Detect available hardware encoders on the system
  */
 export async function detectHardwareEncoders(): Promise<string[]> {

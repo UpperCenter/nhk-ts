@@ -6,7 +6,7 @@ import { spawn } from 'child_process';
 import { Logger } from './logger.js';
 import { ProgramOptions } from './types.js';
 import { detectBlackBoundariesWithMagick } from './analyzer/blackBoundaries.js';
-import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings } from './utils.js';
+import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings, formatCommand } from './utils.js';
 import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
 import { loadEpisodes } from './metadata/episodeService.js';
@@ -164,7 +164,7 @@ export class TVHeadEndTrimmer {
 
         // Log command
         this.logger.info('\nTranscode Command:');
-        this.logger.info(chalk.white(`ffmpeg ${args.join(' ')}`));
+        this.logger.info(chalk.white(formatCommand('ffmpeg', args)));
 
         if (this.options.test) {
             this.logger.info(chalk.yellow('TEST MODE: Transcode command not executed'));
@@ -279,7 +279,7 @@ export class TVHeadEndTrimmer {
         args.push('-nostats', '-progress', 'pipe:1', outputPath, '-y');
 
         this.logger.info('\nTrim+Transcode Command:');
-        this.logger.info(chalk.white(`ffmpeg ${args.join(' ')}`));
+        this.logger.info(chalk.white(formatCommand('ffmpeg', args)));
         if (this.options.test) {
             this.logger.info(chalk.yellow('TEST MODE: Command not executed'));
             return true;
