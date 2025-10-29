@@ -2,6 +2,7 @@ export interface NfoData {
     title: string;
     date: string;
     description: string;
+    recordingEndUTC?: Date;
 }
 
 export interface EpisodeMetadata {
@@ -20,4 +21,18 @@ export interface MetadataInfo {
     episodeName: string;
     firstAired: string;
     tvdbId: string;
+}
+
+export interface NhkEpgEntry {
+    seriesId: string;
+    airingId: string;
+    title: string;
+    episodeTitle: string;
+    description: string;
+    startTime: string; // ISO 8601 format with JST timezone
+    endTime: string; // ISO 8601 format with JST timezone
+}
+
+export interface NhkEpgData {
+    data: NhkEpgEntry[];
 } 

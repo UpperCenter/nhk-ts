@@ -42,5 +42,22 @@ export async function parseNfo(filePath: string, logger: Logger): Promise<NfoDat
         if (line.startsWith('Date:')) date = line.replace('Date:', '').trim();
         if (line.startsWith('Description:')) description = line.replace('Description:', '').trim();
     }
-    return { title, date, description };
+
+    // Try to parse recording end time from the .ts filename
+    let recordingEndUTC: Date | undefined;
+    const match = base.match(/_(\d{4}-\d{2}-\d{2})_(\d{2}:\d{2}:\d{2})$/);
+    if (match && match[1] && match[2]) {
+        const dateTimeString = `${match[1]}T${match[2]}Z`; // Assume UTC
+        const parsedDate = new Date(dateTimeString);
+        if (!isNaN(parsedDate.getTime())) {
+            recordingEndUTC = parsedDate;
+        }
+    }
+
+    const nfoData: NfoData = { title, date, description };
+    if (recordingEndUTC) {
+        nfoData.recordingEndUTC = recordingEndUTC;
+    }
+
+    return nfoData;
 } 

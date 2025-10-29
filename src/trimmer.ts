@@ -10,8 +10,10 @@ import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings, for
 import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
 import { loadEpisodes } from './metadata/episodeService.js';
-import { lookupEpisodeByDescription } from './metadata/lookup.js';
+import { lookupEpisodeByDescription, lookupEpisodeByTitle } from './metadata/lookup.js';
 import { getHardcodedMapping } from './metadata/hardcodedMappings.js';
+import { fetchEpgForDate } from './metadata/nhkEpgClient.js';
+import { findEpgMatch } from './metadata/epgMatcher.js';
 import type { NfoData, EpisodeMetadata, MetadataInfo } from './metadata/types.js';
 
 export class TVHeadEndTrimmer {
@@ -375,6 +377,9 @@ export class TVHeadEndTrimmer {
         if (this.options.metadata) {
             nfoData = await parseNfo(file.fullPath, this.logger);
             this.logger.info(`[METADATA] Parsed NFO: title="${nfoData.title}", date=${nfoData.date}`);
+            if (nfoData.recordingEndUTC) {
+                this.logger.debug(`[METADATA] Recording end time parsed from filename: ${nfoData.recordingEndUTC.toISOString()}`);
+            }
             // Check blacklist patterns (supports '*' wildcards)
             try {
                 const rawList = await fs.readFile(path.resolve(process.cwd(), 'blacklist.json'), 'utf-8');
@@ -429,14 +434,30 @@ export class TVHeadEndTrimmer {
                     this.logger.info(`[METADATA] Found series: ${seriesInfo.name} (ID: ${seriesInfo.tvdb_id})`);
                     // Load episodes (will log cache vs fetch)
                     episodes = await loadEpisodes(seriesInfo.slug, this.options, this.logger);
-                    // Match episode by description
+                    
+                    // Primary lookup: by description
                     this.logger.info('[METADATA] Attempting to match episode by description');
-                    const epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
+                    let epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
+
+                    // Fallback lookup: using NHK EPG
                     if (!epMatch) {
-                        this.logger.warning('[METADATA] No episode match by description');
-                        this.logger.error('[METADATA] Skipping file due to failed episode match');
-                        return false;
-                    } else {
+                        this.logger.warning('[METADATA] No episode match by description. Trying NHK EPG fallback...');
+                        const epgEntries = await fetchEpgForDate(nfoData.date, this.logger);
+                        this.logger.debug(`[METADATA] Fetched ${epgEntries.length} EPG entries for fallback lookup.`);
+                        const epgMatch = findEpgMatch(nfoData, epgEntries, this.logger);
+
+                        if (epgMatch) {
+                            this.logger.info(`[METADATA] Found EPG match: Show: "${epgMatch.title}", Episode: "${epgMatch.episodeTitle || '(none)'}".`);
+                            if (epgMatch.episodeTitle) {
+                                this.logger.info(`[METADATA] Retrying lookup with EPG episode title...`);
+                                epMatch = lookupEpisodeByTitle(episodes, epgMatch.episodeTitle, this.logger);
+                            }
+                        } else {
+                            this.logger.warning('[METADATA] EPG fallback failed to find a match.');
+                        }
+                    }
+
+                    if (epMatch) {
                         this.logger.success(`[METADATA] Matched episode S${epMatch.season}E${epMatch.episodeNumber}: ${epMatch.name}`);
                         metaInfo = {
                             seriesName: seriesInfo.name,
@@ -446,6 +467,10 @@ export class TVHeadEndTrimmer {
                             firstAired: epMatch.firstAired,
                             tvdbId: epMatch.id,
                         };
+                    } else {
+                        this.logger.error('[METADATA] No matching episode found on TVDB after all fallbacks.');
+                        this.logger.error('[METADATA] Skipping file due to failed episode match');
+                        return false;
                     }
                 }
             }
