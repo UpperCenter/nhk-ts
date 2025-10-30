@@ -377,8 +377,8 @@ export class TVHeadEndTrimmer {
         if (this.options.metadata) {
             nfoData = await parseNfo(file.fullPath, this.logger);
             this.logger.info(`[METADATA] Parsed NFO: title="${nfoData.title}", date=${nfoData.date}`);
-            if (nfoData.recordingEndUTC) {
-                this.logger.debug(`[METADATA] Recording end time parsed from filename: ${nfoData.recordingEndUTC.toISOString()}`);
+            if (nfoData.recordingStartUTC) {
+                this.logger.debug(`[METADATA] Recording start time parsed from NFO: ${nfoData.recordingStartUTC.toISOString()}`);
             }
             // Check blacklist patterns (supports '*' wildcards)
             try {

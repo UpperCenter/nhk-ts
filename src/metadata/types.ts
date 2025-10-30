@@ -2,7 +2,7 @@ export interface NfoData {
     title: string;
     date: string;
     description: string;
-    recordingEndUTC?: Date;
+    recordingStartUTC?: Date;
 }
 
 export interface EpisodeMetadata {

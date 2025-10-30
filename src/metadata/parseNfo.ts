@@ -37,26 +37,28 @@ export async function parseNfo(filePath: string, logger: Logger): Promise<NfoDat
     let title = '';
     let date = '';
     let description = '';
+    let startTime: string | null = null;
+
     for (const line of lines) {
         if (line.startsWith('Title:')) title = line.replace('Title:', '').trim();
         if (line.startsWith('Date:')) date = line.replace('Date:', '').trim();
         if (line.startsWith('Description:')) description = line.replace('Description:', '').trim();
+        if (line.startsWith('Start Time (UTC):')) startTime = line.replace('Start Time (UTC):', '').trim();
     }
 
-    // Try to parse recording end time from the .ts filename
-    let recordingEndUTC: Date | undefined;
-    const match = base.match(/_(\d{4}-\d{2}-\d{2})_(\d{2}:\d{2}:\d{2})$/);
-    if (match && match[1] && match[2]) {
-        const dateTimeString = `${match[1]}T${match[2]}Z`; // Assume UTC
+    // Try to parse recording start time from the new .nfo field
+    let recordingStartUTC: Date | undefined;
+    if (date && startTime) {
+        const dateTimeString = `${date}T${startTime}Z`; // Assume UTC
         const parsedDate = new Date(dateTimeString);
         if (!isNaN(parsedDate.getTime())) {
-            recordingEndUTC = parsedDate;
+            recordingStartUTC = parsedDate;
         }
     }
 
     const nfoData: NfoData = { title, date, description };
-    if (recordingEndUTC) {
-        nfoData.recordingEndUTC = recordingEndUTC;
+    if (recordingStartUTC) {
+        nfoData.recordingStartUTC = recordingStartUTC;
     }
 
     return nfoData;
