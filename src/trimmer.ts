@@ -19,6 +19,7 @@ import type { NfoData, EpisodeMetadata, MetadataInfo } from './metadata/types.js
 export class TVHeadEndTrimmer {
     private options: ProgramOptions;
     private logger: Logger;
+    private processedEpisodeIds: Set<string>;
 
     /**
      * @param options ProgramOptions, now includes 'parallelism' for frame analysis concurrency
@@ -29,6 +30,7 @@ export class TVHeadEndTrimmer {
             verbosity: options.verbosity,
             quiet: options.quiet
         });
+        this.processedEpisodeIds = new Set<string>();
     }
 
     private async executeTrimCommand(
@@ -472,6 +474,12 @@ export class TVHeadEndTrimmer {
                         this.logger.error('[METADATA] Skipping file due to failed episode match');
                         return false;
                     }
+
+                    // Check for duplicates before proceeding
+                    if (metaInfo && this.processedEpisodeIds.has(metaInfo.tvdbId)) {
+                        this.logger.info(`[METADATA] Skipping duplicate episode (already processed in this session): S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
+                        return true; // Mark as successful to avoid failure logs
+                    }
                 }
             }
         }
@@ -599,6 +607,11 @@ export class TVHeadEndTrimmer {
                 [formatTime(0), formatTime(beforeDuration), beforeSize + ' MiB'],
                 [formatTime(magickResult.programStart), formatTime(magickResult.programEnd), afterSize + ' MiB']
             ], ['Start', 'End', 'File Size']);
+        }
+
+        // Add to processed list if successful
+        if (success && metaInfo) {
+            this.processedEpisodeIds.add(metaInfo.tvdbId);
         }
 
         // Enhanced delete logic: only delete if ALL requested operations completed successfully
