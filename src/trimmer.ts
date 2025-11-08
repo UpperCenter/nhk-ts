@@ -15,11 +15,13 @@ import { getHardcodedMapping } from './metadata/hardcodedMappings.js';
 import { fetchEpgForDate } from './metadata/nhkEpgClient.js';
 import { findEpgMatch } from './metadata/epgMatcher.js';
 import type { NfoData, EpisodeMetadata, MetadataInfo } from './metadata/types.js';
+import { DatabaseService } from './database.js';
 
 export class TVHeadEndTrimmer {
     private options: ProgramOptions;
     private logger: Logger;
     private processedEpisodeIds: Set<string>;
+    private dbService?: DatabaseService;
 
     /**
      * @param options ProgramOptions, now includes 'parallelism' for frame analysis concurrency
@@ -31,6 +33,9 @@ export class TVHeadEndTrimmer {
             quiet: options.quiet
         });
         this.processedEpisodeIds = new Set<string>();
+        if (options.metadata && options.historyDb) {
+            this.dbService = new DatabaseService(options.historyDb, this.logger);
+        }
     }
 
     private async executeTrimCommand(
@@ -469,6 +474,12 @@ export class TVHeadEndTrimmer {
                             firstAired: epMatch.firstAired,
                             tvdbId: epMatch.id,
                         };
+
+                        // Check history database
+                        if (this.dbService && await this.dbService.isAlreadyProcessed(metaInfo)) {
+                            this.logger.warning(`[HISTORY] Skipping episode already in history DB: S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
+                            return true; // Mark as successful to avoid failure logs
+                        }
                     } else {
                         this.logger.error('[METADATA] No matching episode found on TVDB after all fallbacks.');
                         this.logger.error('[METADATA] Skipping file due to failed episode match');
@@ -559,22 +570,6 @@ export class TVHeadEndTrimmer {
             transcoding: false
         };
 
-        // Check if metadata was successfully completed
-        if (this.options.metadata) {
-            // Metadata is considered successful if we have nfoData and either:
-            // 1. We successfully found episode information (metaInfo), OR
-            // 2. We skipped due to blacklist (which is intentional), OR
-            // 3. We skipped due to missing API key (which is intentional)
-            completedOperations.metadata = !!nfoData && (
-                !!metaInfo ||
-                skipMetadata ||
-                !this.options.tvdbApiKey
-            );
-        } else {
-            // If metadata wasn't requested, consider it "completed"
-            completedOperations.metadata = true;
-        }
-
         let success: boolean;
         if (this.options.transcode) {
             success = await this.executeTrimTranscodeCommand(
@@ -596,6 +591,31 @@ export class TVHeadEndTrimmer {
             completedOperations.trimming = success;
             // If transcoding wasn't requested, consider it "completed"
             completedOperations.transcoding = true;
+        }
+
+        // Add to history DB if successful
+        if (success && metaInfo && this.dbService) {
+            try {
+                await this.dbService.addProcessedFile(metaInfo);
+            } catch (err) {
+                this.logger.warning(`[HISTORY] Failed to add entry to history DB: ${err}`);
+            }
+        }
+        
+        // Check if metadata was successfully completed
+        if (this.options.metadata) {
+            // Metadata is considered successful if we have nfoData and either:
+            // 1. We successfully found episode information (metaInfo), OR
+            // 2. We skipped due to blacklist (which is intentional), OR
+            // 3. We skipped due to missing API key (which is intentional)
+            completedOperations.metadata = !!nfoData && (
+                !!metaInfo ||
+                skipMetadata ||
+                !this.options.tvdbApiKey
+            );
+        } else {
+            // If metadata wasn't requested, consider it "completed"
+            completedOperations.metadata = true;
         }
 
         if (success && !this.options.test) {
@@ -695,6 +715,11 @@ export class TVHeadEndTrimmer {
             this.logger.warning('RUNNING IN TEST MODE - No files will be modified');
         }
 
+        // Init database if enabled
+        if (this.dbService) {
+            await this.dbService.init();
+        }
+
         // Ensure output directory exists
         await this.ensureOutputDirectory();
 
@@ -755,6 +780,11 @@ export class TVHeadEndTrimmer {
                 ]);
                 failedFiles.push(file.name);
             }
+        }
+
+        // Close database connection
+        if (this.dbService) {
+            await this.dbService.close();
         }
 
         this.logger.section('Processing Complete', () => {

@@ -30,6 +30,7 @@ program
     .option('--metadata', 'Enable metadata lookup', false)
     .option('--tvdb-api-key <key>', 'TVDB API key', process.env.TVDB_API_KEY)
     .option('--metadata-cache <path>', 'Path to metadata cache JSON', `${process.cwd()}/cache.json`)
+    .option('--history-db <path>', 'Path to history database file', `${process.cwd()}/history.db`)
     .option('--metadata-rate-limit <n>', 'Max TVDB requests per second', parseFloat, 1)
     .option('--metadata-user-agent <ua>', 'User-Agent for metadata requests', 'Mozilla/5.0 (X11; Linux x86_64; rv:143.0) Gecko/20100101 Firefox/143.0')
     .option('--transcode', 'Enable transcoding of trimmed files to selected container', false)
@@ -83,6 +84,7 @@ if (process.argv.length <= 2) {
         'Metadata Lookup': options.metadata.toString(),
         'TVDB API Key': options.tvdbApiKey ? '••••••••' : '(none)',
         'Metadata Cache': options.metadataCache || '(none)',
+        'History DB': options.historyDb || '(none)',
         'Metadata Rate Limit': `${options.metadataRateLimit}/s`,
         'Delete Originals': options.deleteOriginal.toString(),
         'Transcode': options.transcode.toString(),

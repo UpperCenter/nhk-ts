@@ -138,3 +138,4 @@ cache.json
 debug_audio_levels.txt
 debug_silence.txt
 epg-cache.json
+history.db

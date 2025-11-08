@@ -22,6 +22,7 @@ export interface ProgramOptions {
     metadata: boolean;
     tvdbApiKey?: string;
     metadataCache?: string;
+    historyDb?: string;
     metadataRateLimit?: number;
     metadataUserAgent?: string;
     deleteOriginal: boolean;
