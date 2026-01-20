@@ -44,13 +44,15 @@ export class TVHeadEndTrimmer {
         endTime: number,
         outputFile: string,
     ): Promise<boolean> {
-        const duration = endTime - startTime;
+        // Round up start time to nearest second to avoid catching commercial frames
+        const roundedStartTime = Math.ceil(startTime);
+        const duration = endTime - roundedStartTime;
         const durationMin = Math.round((duration / 60) * 10) / 10;
 
         this.logger.info('\nTrim Command:');
         this.logger.info(
             chalk.white(
-                `ffmpeg -i "${inputFile}" -ss ${startTime} -to ${endTime} -c copy "${outputFile}"`,
+                `ffmpeg -i "${inputFile}" -ss ${roundedStartTime} -to ${endTime} -c copy "${outputFile}"`,
             ),
         );
         this.logger.info(chalk.gray(`Output duration: ${durationMin} minutes`));
@@ -77,7 +79,7 @@ export class TVHeadEndTrimmer {
                 '-i',
                 inputFile,
                 '-ss',
-                startTime.toString(),
+                roundedStartTime.toString(),
                 '-to',
                 endTime.toString(),
                 '-c',
@@ -230,8 +232,11 @@ export class TVHeadEndTrimmer {
         // Get optimal encoding settings based on hardware and options
         const encodingSettings = await getBestEncodingSettings(this.options);
 
+        // Round up start time to nearest second
+        const roundedStartTime = Math.ceil(startTime);
+        
         // Clip duration for progress
-        const clipDuration = endTime - startTime;
+        const clipDuration = endTime - roundedStartTime;
         const ext = format;
         const dir = path.dirname(inputFile);
         // Build filename from metadata or base name
@@ -253,8 +258,7 @@ export class TVHeadEndTrimmer {
         const outputPath = path.join(this.options.output, safeName);
 
         // Build ffmpeg args with error resilience and accurate seeking
-        const duration = endTime - startTime;
-        const args: string[] = ['-err_detect', 'ignore_err', '-ss', startTime.toString(), '-i', inputFile, '-t', duration.toString(),
+        const args: string[] = ['-err_detect', 'ignore_err', '-ss', roundedStartTime.toString(), '-i', inputFile, '-t', clipDuration.toString(),
             '-avoid_negative_ts', 'make_zero',
             '-c:v', encodingSettings.encoder];
 
