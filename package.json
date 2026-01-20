@@ -30,16 +30,16 @@
   "license": "MIT",
   "devDependencies": {
     "@types/cheerio": "^1.0.0",
-    "@types/node": "^24.10.0",
+    "@types/node": "^25.0.9",
     "@types/sqlite3": "^5.1.0",
-    "@typescript-eslint/eslint-plugin": "^8.46.3",
-    "@typescript-eslint/parser": "^8.46.3",
-    "eslint": "^9.39.1",
+    "@typescript-eslint/eslint-plugin": "^8.53.1",
+    "@typescript-eslint/parser": "^8.53.1",
+    "eslint": "^9.39.2",
     "eslint-config-prettier": "^10.1.8",
-    "prettier": "^3.6.2",
-    "rimraf": "^6.1.0",
+    "prettier": "^3.8.0",
+    "rimraf": "^6.1.2",
     "ts-node": "^10.9.2",
-    "tsx": "^4.20.6",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
