@@ -32,7 +32,7 @@ export async function parseNfo(filePath: string, logger: Logger): Promise<NfoDat
         throw new Error(`NFO not found for ${filePath}`);
     }
     logger.debug(`Parsing NFO: ${nfoPath}`);
-    const content = await fs.readFile(nfoPath, 'utf-8');
+    const content = (await fs.readFile(nfoPath, 'utf-8')).replace(/^\uFEFF/, '');
     const lines = content.split(/\r?\n/);
     let title = '';
     let date = '';
