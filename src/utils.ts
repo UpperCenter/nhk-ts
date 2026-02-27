@@ -155,7 +155,8 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
                     '-qmin', '10',
                     '-qmax', '30',
                     '-bf', '4',
-                    '-b_ref_mode', 'middle',
+                    // Disable B-ref to improve robustness on imperfect broadcast streams
+                    '-b_ref_mode', 'disabled',
                     '-temporal-aq', '1',
                     '-spatial-aq', '1',
                     '-aq-strength', '8',
@@ -178,7 +179,8 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
                     '-qmin', '10',
                     '-qmax', '30',
                     '-bf', '4',
-                    '-b_ref_mode', 'middle',
+                    // Disable B-ref to improve robustness on imperfect broadcast streams
+                    '-b_ref_mode', 'disabled',
                     '-temporal-aq', '1',
                     '-spatial-aq', '1',
                     '-aq-strength', '8',

@@ -111,9 +111,14 @@ export class TVHeadEndTrimmer {
         inputFile: string,
         metaInfo?: MetadataInfo,
     ): Promise<boolean> {
-        const { audioCopy, format } = this.options;
+        const { audioCopy, format, hwAccel } = this.options;
         // Get optimal encoding settings based on hardware and options
         const encodingSettings = await getBestEncodingSettings(this.options);
+
+        // Enable CUDA/NVDEC path when requested and using an NVENC encoder
+        const useCuda = !!hwAccel &&
+            (hwAccel === 'nvenc' || hwAccel === 'auto') &&
+            encodingSettings.encoder.includes('nvenc');
 
         // Total duration of input for progress calculation
         const totalDuration = await this.getTotalDuration(inputFile);
@@ -132,9 +137,20 @@ export class TVHeadEndTrimmer {
         const outputPath = path.join(this.options.output, safeName);
 
         // Build ffmpeg arguments with error resilience and accurate seeking
-        const args: string[] = ['-err_detect', 'ignore_err', '-ss', '0', '-i', inputFile,
+        const args: string[] = [];
+
+        if (useCuda) {
+            // Hardware-accelerated decode + GPU pipeline
+            args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda');
+        }
+
+        args.push(
+            '-err_detect', 'ignore_err',
+            '-ss', '0',
+            '-i', inputFile,
             '-avoid_negative_ts', 'make_zero',
-            '-c:v', encodingSettings.encoder];
+            '-c:v', encodingSettings.encoder,
+        );
 
         // Add preset for software encoders, or hardware-specific settings
         if (encodingSettings.encoder.includes('nvenc')) {
@@ -150,7 +166,11 @@ export class TVHeadEndTrimmer {
             args.push(...encodingSettings.extraArgs);
         }
 
-        args.push('-vf', 'bwdif=mode=0:parity=auto,format=yuv420p');
+        // Prefer GPU deinterlacing when using CUDA/NVDEC + NVENC
+        const deintFilter = useCuda
+            ? 'bwdif_cuda=mode=0:parity=auto:deint=interlaced,scale_cuda=format=yuv420p'
+            : 'bwdif=mode=0:parity=auto,format=yuv420p';
+        args.push('-vf', deintFilter);
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {
@@ -228,9 +248,14 @@ export class TVHeadEndTrimmer {
         metaInfo?: MetadataInfo,
         showYear?: string,
     ): Promise<boolean> {
-        const { audioCopy, format } = this.options;
+        const { audioCopy, format, hwAccel } = this.options;
         // Get optimal encoding settings based on hardware and options
         const encodingSettings = await getBestEncodingSettings(this.options);
+
+        // Enable CUDA/NVDEC path when requested and using an NVENC encoder
+        const useCuda = !!hwAccel &&
+            (hwAccel === 'nvenc' || hwAccel === 'auto') &&
+            encodingSettings.encoder.includes('nvenc');
 
         // Round up start time to nearest second
         const roundedStartTime = Math.ceil(startTime);
@@ -258,9 +283,21 @@ export class TVHeadEndTrimmer {
         const outputPath = path.join(this.options.output, safeName);
 
         // Build ffmpeg args with error resilience and accurate seeking
-        const args: string[] = ['-err_detect', 'ignore_err', '-ss', roundedStartTime.toString(), '-i', inputFile, '-t', clipDuration.toString(),
+        const args: string[] = [];
+
+        if (useCuda) {
+            // Hardware-accelerated decode + GPU pipeline
+            args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda');
+        }
+
+        args.push(
+            '-err_detect', 'ignore_err',
+            '-ss', roundedStartTime.toString(),
+            '-i', inputFile,
+            '-t', clipDuration.toString(),
             '-avoid_negative_ts', 'make_zero',
-            '-c:v', encodingSettings.encoder];
+            '-c:v', encodingSettings.encoder,
+        );
 
         // Add preset for software encoders, or hardware-specific settings
         if (encodingSettings.encoder.includes('nvenc')) {
@@ -276,7 +313,11 @@ export class TVHeadEndTrimmer {
             args.push(...encodingSettings.extraArgs);
         }
 
-        args.push('-vf', 'bwdif=mode=0:parity=auto,format=yuv420p');
+        // Prefer GPU deinterlacing when using CUDA/NVDEC + NVENC
+        const deintFilter = useCuda
+            ? 'bwdif_cuda=mode=0:parity=auto:deint=interlaced,scale_cuda=format=yuv420p'
+            : 'bwdif=mode=0:parity=auto,format=yuv420p';
+        args.push('-vf', deintFilter);
         if (audioCopy) {
             args.push('-c:a', 'copy');
         } else {
