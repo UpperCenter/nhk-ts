@@ -9,12 +9,13 @@ import { detectBlackBoundariesWithMagick } from './analyzer/blackBoundaries.js';
 import { formatTime, askQuestion, sanitizeFilename, getBestEncodingSettings, formatCommand, stripNHKTimestampSuffix } from './utils.js';
 import { parseNfo } from './metadata/parseNfo.js';
 import { login, searchSeries } from './metadata/tvdbClient.js';
-import { loadEpisodes } from './metadata/episodeService.js';
+import { loadEpisodesForSeries } from './metadata/episodeService.js';
+import { searchTvSeries } from './metadata/tmdbClient.js';
 import { lookupEpisodeByDescription, lookupEpisodeByTitle } from './metadata/lookup.js';
 import { getHardcodedMapping } from './metadata/hardcodedMappings.js';
 import { fetchEpgForDate } from './metadata/nhkEpgClient.js';
 import { findEpgMatch } from './metadata/epgMatcher.js';
-import type { NfoData, EpisodeMetadata, MetadataInfo } from './metadata/types.js';
+import type { NfoData, EpisodeMetadata, MetadataInfo, ResolvedSeries } from './metadata/types.js';
 import { DatabaseService } from './database.js';
 
 export class TVHeadEndTrimmer {
@@ -421,10 +422,12 @@ export class TVHeadEndTrimmer {
 
         // Metadata lookup (moved before video analysis)
         let nfoData: NfoData | undefined;
-        let seriesInfo: { tvdb_id: string; slug: string; name: string; year: string } | null = null;
+        let resolved: ResolvedSeries | null = null;
         let episodes: EpisodeMetadata[] = [];
         let metaInfo: MetadataInfo | undefined;
         let skipMetadata = false;
+        /** True when neither API key is set and there is no hardcoded TVDB mapping. */
+        let skipMetadataNoKeys = false;
 
         if (this.options.metadata) {
             nfoData = await parseNfo(file.fullPath, this.logger);
@@ -453,89 +456,156 @@ export class TVHeadEndTrimmer {
             } catch {
                 this.logger.debug('[METADATA] No valid blacklist.json found; proceeding with metadata lookup');
             }
-            // Only proceed if not blacklisted and API key provided
+            const hardcodedMapping = getHardcodedMapping(nfoData.title);
             if (skipMetadata) {
                 this.logger.info('[METADATA] Metadata lookup skipped due to blacklist');
-            } else if (!this.options.tvdbApiKey) {
-                this.logger.warning('[METADATA] TVDB API key missing; skipping metadata lookup');
+            } else if (!this.options.tvdbApiKey && !this.options.tmdbApiKey && !hardcodedMapping) {
+                skipMetadataNoKeys = true;
+                this.logger.warning('[METADATA] No TVDB or TMDB API key; skipping metadata lookup');
             } else {
-                this.logger.info('[METADATA] Searching TVDB for series information');
-
-                // Check for hardcoded mapping first
-                const hardcodedMapping = getHardcodedMapping(nfoData.title);
+                // Hardcoded TVDB mapping (slug scrape; no TVDB API key required)
                 if (hardcodedMapping) {
                     this.logger.info(`[METADATA] Using hardcoded mapping for "${nfoData.title}"`);
-                    seriesInfo = {
+                    resolved = {
+                        source: 'tvdb',
                         tvdb_id: hardcodedMapping.tvdb_id,
                         slug: hardcodedMapping.slug,
                         name: hardcodedMapping.name,
                         year: hardcodedMapping.year
                     };
-                } else {
+                } else if (this.options.tvdbApiKey) {
+                    this.logger.info('[METADATA] Searching TVDB for series information');
                     const token = await login(this.options.tvdbApiKey, this.options.metadataUserAgent!);
                     this.logger.debug('[METADATA] TVDB login successful');
-                    seriesInfo = await searchSeries(nfoData.title, token, this.options.metadataUserAgent!);
+                    const seriesInfo = await searchSeries(nfoData.title, token, this.options.metadataUserAgent!);
+                    if (seriesInfo) {
+                        resolved = {
+                            source: 'tvdb',
+                            tvdb_id: seriesInfo.tvdb_id,
+                            slug: seriesInfo.slug,
+                            name: seriesInfo.name,
+                            year: seriesInfo.year
+                        };
+                    } else {
+                        this.logger.warning(`[METADATA] No TVDB series match for "${nfoData.title}"`);
+                    }
                 }
 
-                if (!seriesInfo) {
-                    this.logger.warning(`[METADATA] No TVDB series match for "${nfoData.title}"`);
-                    // Early exit if metadata lookup fails to find a series
+                if (!resolved && this.options.tmdbApiKey) {
+                    this.logger.info('[METADATA] Searching TMDB for series information');
+                    const tmdbMatch = await searchTvSeries(
+                        nfoData,
+                        this.options.tmdbApiKey,
+                        this.options.metadataUserAgent!,
+                        this.logger
+                    );
+                    if (tmdbMatch) {
+                        resolved = {
+                            source: 'tmdb',
+                            tmdbSeriesId: tmdbMatch.tmdbSeriesId,
+                            name: tmdbMatch.name,
+                            year: tmdbMatch.year
+                        };
+                    } else {
+                        this.logger.warning(`[METADATA] No TMDB series match for "${nfoData.title}"`);
+                    }
+                }
+
+                if (!resolved) {
                     this.logger.error('[METADATA] Skipping file due to failed metadata lookup (no series match)');
                     return false;
-                } else {
-                    this.logger.info(`[METADATA] Found series: ${seriesInfo.name} (ID: ${seriesInfo.tvdb_id})`);
-                    // Load episodes (will log cache vs fetch)
-                    episodes = await loadEpisodes(seriesInfo.slug, this.options, this.logger);
-                    
-                    // Primary lookup: by description
-                    this.logger.info('[METADATA] Attempting to match episode by description');
-                    let epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
+                }
 
-                    // Fallback lookup: using NHK EPG
-                    if (!epMatch) {
-                        this.logger.warning('[METADATA] No episode match by description. Trying NHK EPG fallback...');
-                        const epgEntries = await fetchEpgForDate(nfoData.date, this.logger);
-                        this.logger.debug(`[METADATA] Fetched ${epgEntries.length} EPG entries for fallback lookup.`);
-                        const epgMatch = findEpgMatch(nfoData, epgEntries, this.logger);
+                const catalogLabel = resolved.source === 'tvdb' ? `TVDB ID: ${resolved.tvdb_id}` : `TMDB ID: ${resolved.tmdbSeriesId}`;
+                this.logger.info(`[METADATA] Found series: ${resolved.name} (${resolved.source}, ${catalogLabel})`);
+                episodes = await loadEpisodesForSeries(resolved, this.options, this.logger);
 
-                        if (epgMatch) {
-                            this.logger.info(`[METADATA] Found EPG match: Show: "${epgMatch.title}", Episode: "${epgMatch.episodeTitle || '(none)'}".`);
-                            if (epgMatch.episodeTitle) {
-                                this.logger.info(`[METADATA] Retrying lookup with EPG episode title...`);
-                                epMatch = lookupEpisodeByTitle(episodes, epgMatch.episodeTitle, this.logger);
-                            }
-                        } else {
-                            this.logger.warning('[METADATA] EPG fallback failed to find a match.');
-                        }
-                    }
+                // Primary lookup: by description
+                this.logger.info('[METADATA] Attempting to match episode by description');
+                let epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
 
-                    if (epMatch) {
-                        this.logger.success(`[METADATA] Matched episode S${epMatch.season}E${epMatch.episodeNumber}: ${epMatch.name}`);
-                        metaInfo = {
-                            seriesName: seriesInfo.name,
-                            season: epMatch.season,
-                            episodeNumber: epMatch.episodeNumber,
-                            episodeName: epMatch.name,
-                            firstAired: epMatch.firstAired,
-                            tvdbId: epMatch.id,
-                        };
+                /** EPG episode title for reuse if we retry with TMDB episode list */
+                let epgEpisodeTitle: string | undefined;
 
-                        // Check history database
-                        if (this.dbService && await this.dbService.isAlreadyProcessed(metaInfo)) {
-                            this.logger.warning(`[HISTORY] Skipping episode already in history DB: S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
-                            return true; // Mark as successful to avoid failure logs
+                // Fallback lookup: using NHK EPG
+                if (!epMatch) {
+                    this.logger.warning('[METADATA] No episode match by description. Trying NHK EPG fallback...');
+                    const epgEntries = await fetchEpgForDate(nfoData.date, this.logger);
+                    this.logger.debug(`[METADATA] Fetched ${epgEntries.length} EPG entries for fallback lookup.`);
+                    const epgMatch = findEpgMatch(nfoData, epgEntries, this.logger);
+
+                    if (epgMatch) {
+                        this.logger.info(`[METADATA] Found EPG match: Show: "${epgMatch.title}", Episode: "${epgMatch.episodeTitle || '(none)'}".`);
+                        if (epgMatch.episodeTitle) {
+                            epgEpisodeTitle = epgMatch.episodeTitle;
+                            this.logger.info(`[METADATA] Retrying lookup with EPG episode title...`);
+                            epMatch = lookupEpisodeByTitle(episodes, epgMatch.episodeTitle, this.logger);
                         }
                     } else {
-                        this.logger.error('[METADATA] No matching episode found on TVDB after all fallbacks.');
-                        this.logger.error('[METADATA] Skipping file due to failed episode match');
-                        return false;
+                        this.logger.warning('[METADATA] EPG fallback failed to find a match.');
                     }
+                }
 
-                    // Check for duplicates before proceeding
-                    if (metaInfo && this.processedEpisodeIds.has(metaInfo.tvdbId)) {
-                        this.logger.info(`[METADATA] Skipping duplicate episode (already processed in this session): S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
+                // TVDB found the series but episode titles/overviews may not match NHK; retry with TMDB episodes
+                if (!epMatch && resolved.source === 'tvdb' && this.options.tmdbApiKey) {
+                    this.logger.info('[METADATA] Episode match failed on TVDB; retrying with TMDB episode list...');
+                    const tmdbMatch = await searchTvSeries(
+                        nfoData,
+                        this.options.tmdbApiKey,
+                        this.options.metadataUserAgent!,
+                        this.logger
+                    );
+                    if (tmdbMatch) {
+                        resolved = {
+                            source: 'tmdb',
+                            tmdbSeriesId: tmdbMatch.tmdbSeriesId,
+                            name: tmdbMatch.name,
+                            year: tmdbMatch.year
+                        };
+                        episodes = await loadEpisodesForSeries(resolved, this.options, this.logger);
+                        this.logger.info('[METADATA] Attempting to match episode by description (TMDB)');
+                        epMatch = lookupEpisodeByDescription(episodes, nfoData.description);
+                        if (!epMatch && epgEpisodeTitle) {
+                            this.logger.info('[METADATA] Retrying EPG episode title against TMDB episode names...');
+                            epMatch = lookupEpisodeByTitle(episodes, epgEpisodeTitle, this.logger);
+                        }
+                    } else {
+                        this.logger.warning('[METADATA] TMDB series search failed; cannot load TMDB episode list.');
+                    }
+                }
+
+                const episodeSource = resolved.source === 'tvdb' ? 'tvdb' : 'tmdb';
+
+                if (epMatch) {
+                    this.logger.success(`[METADATA] Matched episode S${epMatch.season}E${epMatch.episodeNumber}: ${epMatch.name}`);
+                    metaInfo = {
+                        seriesName: resolved.name,
+                        season: epMatch.season,
+                        episodeNumber: epMatch.episodeNumber,
+                        episodeName: epMatch.name,
+                        firstAired: epMatch.firstAired,
+                        tvdbId: epMatch.id,
+                        episodeSource,
+                    };
+
+                    // Check history database
+                    if (this.dbService && await this.dbService.isAlreadyProcessed(metaInfo)) {
+                        this.logger.warning(`[HISTORY] Skipping episode already in history DB: S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
                         return true; // Mark as successful to avoid failure logs
                     }
+                } else {
+                    this.logger.error(
+                        '[METADATA] No matching episode after description, NHK EPG title, and TMDB fallbacks.'
+                    );
+                    this.logger.error('[METADATA] Skipping file due to failed episode match');
+                    return false;
+                }
+
+                // Check for duplicates before proceeding
+                const dedupKey = `${episodeSource}:${metaInfo!.tvdbId}`;
+                if (metaInfo && this.processedEpisodeIds.has(dedupKey)) {
+                    this.logger.info(`[METADATA] Skipping duplicate episode (already processed in this session): S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
+                    return true; // Mark as successful to avoid failure logs
                 }
             }
         }
@@ -564,7 +634,7 @@ export class TVHeadEndTrimmer {
         if (this.options.transcode) {
             // When transcoding, use the appropriate extension
             if (this.options.metadata && metaInfo) {
-                const showYear = seriesInfo?.year || '';
+                const showYear = resolved?.year || '';
                 const seasonStr = String(metaInfo.season).padStart(2, '0');
                 const episodeStr = String(metaInfo.episodeNumber).padStart(2, '0');
                 outputFileName = `${metaInfo.seriesName} (${showYear}) - S${seasonStr}E${episodeStr} - ${metaInfo.episodeName}.${this.options.format}`;
@@ -574,7 +644,7 @@ export class TVHeadEndTrimmer {
         } else {
             // When only trimming (no transcode), use .ts extension
             if (this.options.metadata && metaInfo) {
-                const showYear = seriesInfo?.year || '';
+                const showYear = resolved?.year || '';
                 const seasonStr = String(metaInfo.season).padStart(2, '0');
                 const episodeStr = String(metaInfo.episodeNumber).padStart(2, '0');
                 outputFileName = `${metaInfo.seriesName} (${showYear}) - S${seasonStr}E${episodeStr} - ${metaInfo.episodeName}.ts`;
@@ -622,7 +692,7 @@ export class TVHeadEndTrimmer {
                 magickResult.programStart,
                 magickResult.programEnd,
                 metaInfo,
-                seriesInfo?.year,
+                resolved?.year,
             );
             completedOperations.trimming = success;
             completedOperations.transcoding = success;
@@ -656,7 +726,7 @@ export class TVHeadEndTrimmer {
             completedOperations.metadata = !!nfoData && (
                 !!metaInfo ||
                 skipMetadata ||
-                !this.options.tvdbApiKey
+                skipMetadataNoKeys
             );
         } else {
             // If metadata wasn't requested, consider it "completed"
@@ -676,7 +746,8 @@ export class TVHeadEndTrimmer {
 
         // Add to processed list if successful
         if (success && metaInfo) {
-            this.processedEpisodeIds.add(metaInfo.tvdbId);
+            const src = metaInfo.episodeSource || 'tvdb';
+            this.processedEpisodeIds.add(`${src}:${metaInfo.tvdbId}`);
         }
 
         // Enhanced delete logic: only delete if ALL requested operations completed successfully

@@ -1,4 +1,3 @@
-import type { MetadataInfo } from './types.js';
 import { compareTwoStrings } from 'string-similarity';
 import { getHardcodedMapping } from './hardcodedMappings.js';
 

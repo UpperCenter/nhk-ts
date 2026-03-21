@@ -2,6 +2,16 @@ import type { EpisodeMetadata } from './types.js';
 import { compareTwoStrings } from 'string-similarity';
 import { Logger } from '../logger.js';
 
+/** Normalize titles for fuzzy matching (quotes, dashes, whitespace). */
+export function normalizeEpisodeTitleForMatch(s: string): string {
+    return s
+        .toLowerCase()
+        .replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'")
+        .replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
 /**
  * Given a list of episodes and an NFO description, return the best-matching episode
  */
@@ -41,13 +51,14 @@ export function lookupEpisodeByTitle(
         return null;
     }
 
-    const title = episodeTitle.toLowerCase();
+    const title = normalizeEpisodeTitleForMatch(episodeTitle);
     let bestScore = 0;
     let bestEpisode: EpisodeMetadata | null = null;
     const comparisons: { name: string; score: number }[] = [];
 
     for (const ep of episodes) {
-        const score = compareTwoStrings(title, ep.name.toLowerCase());
+        const epNorm = normalizeEpisodeTitleForMatch(ep.name);
+        const score = compareTwoStrings(title, epNorm);
         comparisons.push({ name: ep.name, score });
         if (score > bestScore) {
             bestScore = score;
@@ -59,7 +70,7 @@ export function lookupEpisodeByTitle(
     comparisons.sort((a, b) => b.score - a.score);
 
     logger.debug(`[METADATA] EPG title lookup: "${episodeTitle}"`);
-    logger.debug(`[METADATA] Top 5 TVDB matches:`);
+    logger.debug(`[METADATA] Top 5 episode title matches:`);
     comparisons.slice(0, 5).forEach(c => {
         logger.debug(`  - "${c.name}" (Score: ${c.score.toFixed(2)})`);
     });

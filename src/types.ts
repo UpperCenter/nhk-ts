@@ -21,6 +21,8 @@ export interface ProgramOptions {
     parallelism?: number;
     metadata: boolean;
     tvdbApiKey?: string;
+    /** TMDB v3 read access token (Bearer) for fallback / TMDB-only metadata. */
+    tmdbApiKey?: string;
     metadataCache?: string;
     historyDb?: string;
     metadataRateLimit?: number;
@@ -57,4 +59,5 @@ export interface MetadataInfo {
     episodeName: string;
     firstAired: string;
     tvdbId: string;
+    episodeSource?: 'tvdb' | 'tmdb';
 } 

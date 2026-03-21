@@ -29,6 +29,7 @@ program
     .option('--parallelism <n>', 'Number of frames to process in parallel', parseInt, 12)
     .option('--metadata', 'Enable metadata lookup', false)
     .option('--tvdb-api-key <key>', 'TVDB API key', process.env.TVDB_API_KEY)
+    .option('--tmdb-api-key <token>', 'TMDB v3 read access token (Bearer)', process.env.TMDB_API_KEY)
     .option('--metadata-cache <path>', 'Path to metadata cache JSON', `${process.cwd()}/cache.json`)
     .option('--history-db <path>', 'Path to history database file', `${process.cwd()}/history.db`)
     .option('--metadata-rate-limit <n>', 'Max TVDB requests per second', parseFloat, 1)
@@ -83,6 +84,7 @@ if (process.argv.length <= 2) {
         'Auto-Confirm': options.yes.toString(),
         'Metadata Lookup': options.metadata.toString(),
         'TVDB API Key': options.tvdbApiKey ? '••••••••' : '(none)',
+        'TMDB API Key': options.tmdbApiKey ? '••••••••' : '(none)',
         'Metadata Cache': options.metadataCache || '(none)',
         'History DB': options.historyDb || '(none)',
         'Metadata Rate Limit': `${options.metadataRateLimit}/s`,

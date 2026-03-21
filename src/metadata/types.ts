@@ -21,7 +21,12 @@ export interface MetadataInfo {
     episodeName: string;
     firstAired: string;
     tvdbId: string;
+    episodeSource?: 'tvdb' | 'tmdb';
 }
+
+export type ResolvedSeries =
+    | { source: 'tvdb'; tvdb_id: string; slug: string; name: string; year: string }
+    | { source: 'tmdb'; tmdbSeriesId: number; name: string; year: string };
 
 export interface NhkEpgEntry {
     seriesId: string;
