@@ -58,6 +58,7 @@ if (process.argv.length <= 2) {
         verbosity: options.verbosity,
         quiet: options.quiet
     });
+    const hwAccelSource = program.getOptionValueSource('hwAccel');
 
     const pkgVersion = program.version() ?? '0.0.0';
     if (!options.quiet) {
@@ -142,9 +143,10 @@ if (process.argv.length <= 2) {
         // Apply --best flag settings
         if (options.best) {
             logger.info('Best quality mode enabled — optimizing settings for modern systems…');
-            // Override settings for best quality with hardware acceleration
-            if (!options.encoder) {
-                options.hwAccel = options.hwAccel || 'auto';
+            // If user didn't explicitly pick hw acceleration, auto-enable it in best mode.
+            // This avoids selecting NVENC encode while leaving decode/deinterlace on CPU.
+            if (hwAccelSource === 'default' && options.hwAccel === 'none') {
+                options.hwAccel = 'auto';
             }
         }
     }

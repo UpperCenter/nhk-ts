@@ -47,6 +47,12 @@ export class TVHeadEndTrimmer {
         return `… (trimmed ${dropped} chars)\n` + input.slice(-maxChars);
     }
 
+    private appendTail(prev: string, chunk: string, maxChars: number): string {
+        const combined = prev + chunk;
+        if (combined.length <= maxChars) return combined;
+        return combined.slice(-maxChars);
+    }
+
     private formatFfmpegFailure(opts: {
         label: string;
         code: number | null;
@@ -75,6 +81,15 @@ export class TVHeadEndTrimmer {
             return new Error(`${message}\n${details}`);
         }
         return new Error(message);
+    }
+
+    private parseFfmpegTimeToSeconds(line: string): number | null {
+        const match = line.match(/time=(\d{2}):(\d{2}):(\d{2}(?:\.\d+)?)/);
+        if (!match) return null;
+        const hours = parseInt(match[1] ?? '0', 10);
+        const minutes = parseInt(match[2] ?? '0', 10);
+        const seconds = parseFloat(match[3] ?? '0');
+        return (hours * 3600) + (minutes * 60) + seconds;
     }
 
     private async executeTrimCommand(
@@ -197,6 +212,8 @@ export class TVHeadEndTrimmer {
         }
 
         args.push(
+            '-loglevel', 'level+warning',
+            '-stats',
             '-err_detect', 'ignore_err',
             '-ss', '0',
             '-i', inputFile,
@@ -220,7 +237,7 @@ export class TVHeadEndTrimmer {
 
         // Prefer GPU deinterlacing when using CUDA/NVDEC + NVENC
         const deintFilter = useCuda
-            ? 'bwdif_cuda=mode=0:parity=auto:deint=interlaced,scale_cuda=format=yuv420p'
+            ? 'bwdif_cuda=mode=0:parity=auto,hwdownload,format=nv12,format=yuv420p'
             : 'bwdif=mode=0:parity=auto,format=yuv420p';
         args.push('-vf', deintFilter);
         if (audioCopy) {
@@ -235,7 +252,6 @@ export class TVHeadEndTrimmer {
         } else {
             args.push('-map', '0:v:0', '-map', '0:a:0', '-movflags', '+faststart');
         }
-        args.push('-nostats', '-progress', 'pipe:1');
         // Metadata tags if available
         if (metaInfo) {
             args.push('-metadata', `title=${metaInfo.seriesName} - S${season}E${episode} - ${metaInfo.episodeName}`);
@@ -258,28 +274,23 @@ export class TVHeadEndTrimmer {
         try {
             await new Promise((resolve, reject) => {
                 const cmd = formatCommand('ffmpeg', args);
-                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-                let buffer = '';
+                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
                 let lastPercent = -1;
                 let stderr = '';
-                proc.stdout.on('data', (chunk: Buffer) => {
-                    buffer += chunk.toString();
-                    const lines = buffer.split(/\r?\n/);
-                    buffer = lines.pop()!;
+                proc.stderr.on('data', (chunk: Buffer) => {
+                    const text = chunk.toString();
+                    stderr = this.appendTail(stderr, text, this.ffmpegLogTailChars);
+                    const lines = text.split(/[\r\n]+/).filter(Boolean);
                     for (const line of lines) {
-                        const [key, val] = line.split('=');
-                        if (key === 'out_time_ms') {
-                            const outMs = parseInt(val!);
-                            const seconds = outMs / 1e6;
-                            const percent = Math.floor((seconds / totalDuration) * 100);
-                            if (percent !== lastPercent) {
-                                lastPercent = percent;
-                                this.logger.progress(`Transcode: ${percent}%`);
-                            }
+                        const seconds = this.parseFfmpegTimeToSeconds(line);
+                        if (seconds === null) continue;
+                        const percent = Math.floor((seconds / totalDuration) * 100);
+                        if (percent !== lastPercent) {
+                            lastPercent = percent;
+                            this.logger.progress(`Transcode: ${percent}%`);
                         }
                     }
                 });
-                proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
                 proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
                     if (code === 0) return resolve(null);
                     const details = this.formatFfmpegFailure({
@@ -356,6 +367,8 @@ export class TVHeadEndTrimmer {
         }
 
         args.push(
+            '-loglevel', 'level+warning',
+            '-stats',
             '-err_detect', 'ignore_err',
             '-ss', roundedStartTime.toString(),
             '-i', inputFile,
@@ -380,7 +393,7 @@ export class TVHeadEndTrimmer {
 
         // Prefer GPU deinterlacing when using CUDA/NVDEC + NVENC
         const deintFilter = useCuda
-            ? 'bwdif_cuda=mode=0:parity=auto:deint=interlaced,scale_cuda=format=yuv420p'
+            ? 'bwdif_cuda=mode=0:parity=auto,hwdownload,format=nv12,format=yuv420p'
             : 'bwdif=mode=0:parity=auto,format=yuv420p';
         args.push('-vf', deintFilter);
         if (audioCopy) {
@@ -395,7 +408,7 @@ export class TVHeadEndTrimmer {
         } else {
             args.push('-map', '0:v:0', '-map', '0:a:0', '-movflags', '+faststart');
         }
-        args.push('-nostats', '-progress', 'pipe:1', outputPath, '-y');
+        args.push(outputPath, '-y');
 
         this.logger.info('\nTrim+Transcode Command:');
         this.logger.info(colors.onSurface(formatCommand('ffmpeg', args)));
@@ -408,27 +421,23 @@ export class TVHeadEndTrimmer {
         try {
             await new Promise((resolve, reject) => {
                 const cmd = formatCommand('ffmpeg', args);
-                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
-                let buffer = '';
+                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
                 let lastPercent = -1;
                 let stderr = '';
-                proc.stdout.on('data', (chunk: Buffer) => {
-                    buffer += chunk.toString();
-                    const lines = buffer.split(/\r?\n/);
-                    buffer = lines.pop()!;
+                proc.stderr.on('data', (chunk: Buffer) => {
+                    const text = chunk.toString();
+                    stderr = this.appendTail(stderr, text, this.ffmpegLogTailChars);
+                    const lines = text.split(/[\r\n]+/).filter(Boolean);
                     for (const line of lines) {
-                        const [key, val] = line.split('=');
-                        if (key === 'out_time_ms') {
-                            const seconds = parseInt(val!) / 1e6;
-                            const pct = Math.floor((seconds / clipDuration) * 100);
-                            if (pct !== lastPercent) {
-                                lastPercent = pct;
-                                process.stdout.write(`\r⏳ ${pct}%`);
-                            }
+                        const seconds = this.parseFfmpegTimeToSeconds(line);
+                        if (seconds === null) continue;
+                        const pct = Math.floor((seconds / clipDuration) * 100);
+                        if (pct !== lastPercent) {
+                            lastPercent = pct;
+                            process.stdout.write(`\r⏳ ${pct}%`);
                         }
                     }
                 });
-                proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
                 proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
                     if (code === 0) return resolve(null);
                     const details = this.formatFfmpegFailure({

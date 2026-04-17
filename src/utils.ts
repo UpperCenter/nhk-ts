@@ -160,7 +160,7 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
                     '-temporal-aq', '1',
                     '-spatial-aq', '1',
                     '-aq-strength', '8',
-                    '-surfaces', '64',
+                    '-surfaces', '32',
                     '-gpu', '0'
                 ]
             };
@@ -184,7 +184,7 @@ export async function getBestEncodingSettings(options: ProgramOptions): Promise<
                     '-temporal-aq', '1',
                     '-spatial-aq', '1',
                     '-aq-strength', '8',
-                    '-surfaces', '64',
+                    '-surfaces', '32',
                     '-gpu', '0'
                 ]
             };
