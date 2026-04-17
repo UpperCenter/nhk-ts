@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { promises as fs } from 'fs';
 import * as fsSync from 'fs';
-import chalk from 'chalk';
+import { colors } from './ui/styles.js';
 import { spawn } from 'child_process';
 import { Logger } from './logger.js';
 import { ProgramOptions } from './types.js';
@@ -24,6 +24,8 @@ export class TVHeadEndTrimmer {
     private processedEpisodeIds: Set<string>;
     private dbService?: DatabaseService;
 
+    private readonly ffmpegLogTailChars = 24_000;
+
     /**
      * @param options ProgramOptions, now includes 'parallelism' for frame analysis concurrency
      */
@@ -39,6 +41,42 @@ export class TVHeadEndTrimmer {
         }
     }
 
+    private trimTail(input: string, maxChars: number): string {
+        if (input.length <= maxChars) return input;
+        const dropped = input.length - maxChars;
+        return `… (trimmed ${dropped} chars)\n` + input.slice(-maxChars);
+    }
+
+    private formatFfmpegFailure(opts: {
+        label: string;
+        code: number | null;
+        signal: NodeJS.Signals | null;
+        stderr: string;
+        stdout?: string;
+        command: string;
+    }): string {
+        const parts: string[] = [];
+        parts.push(`${opts.label} failed`);
+        parts.push(`command: ${opts.command}`);
+        parts.push(`exit: code=${opts.code ?? 'null'} signal=${opts.signal ?? 'null'}`);
+        if (opts.stderr.trim().length > 0) {
+            parts.push('--- ffmpeg stderr (tail) ---');
+            parts.push(this.trimTail(opts.stderr, this.ffmpegLogTailChars));
+        }
+        if (this.options.verbosity === 'verbose' && opts.stdout && opts.stdout.trim().length > 0) {
+            parts.push('--- ffmpeg stdout (tail) ---');
+            parts.push(this.trimTail(opts.stdout, this.ffmpegLogTailChars));
+        }
+        return parts.join('\n');
+    }
+
+    private makeFfmpegError(message: string, details: string): Error {
+        if (this.options.verbosity === 'verbose') {
+            return new Error(`${message}\n${details}`);
+        }
+        return new Error(message);
+    }
+
     private async executeTrimCommand(
         inputFile: string,
         startTime: number,
@@ -52,28 +90,28 @@ export class TVHeadEndTrimmer {
 
         this.logger.info('\nTrim Command:');
         this.logger.info(
-            chalk.white(
+            colors.onSurface(
                 `ffmpeg -i "${inputFile}" -ss ${roundedStartTime} -to ${endTime} -c copy "${outputFile}"`,
             ),
         );
-        this.logger.info(chalk.gray(`Output duration: ${durationMin} minutes`));
+        this.logger.info(colors.muted(`Output duration: ${durationMin} minutes`));
 
         if (this.options.test) {
-            this.logger.info(chalk.yellow('TEST MODE: Command not executed'));
+            this.logger.info(colors.tertiary('TEST MODE: Command not executed'));
             return true;
         }
 
         if (this.options.yes) {
-            this.logger.info(chalk.yellow('Automatically confirming trim operation'));
+            this.logger.info(colors.tertiary('Automatically confirming trim operation'));
         } else {
             const response = await askQuestion('\nExecute this trim command? (y/N): ');
             if (response.toLowerCase() !== 'y') {
-                this.logger.info(chalk.yellow('Trim operation cancelled'));
+                this.logger.info(colors.tertiary('Trim operation cancelled'));
                 return false;
             }
         }
 
-        this.logger.info(chalk.yellow('Executing trim operation...'));
+        this.logger.info(colors.tertiary('Executing trim operation…'));
 
         try {
             const args = [
@@ -90,8 +128,21 @@ export class TVHeadEndTrimmer {
             ];
 
             await new Promise((resolve, reject) => {
-                const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
-                proc.on('close', (code: number) => code === 0 ? resolve(null) : reject(new Error('ffmpeg failed')));
+                const cmd = formatCommand('ffmpeg', args);
+                let stderr = '';
+                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+                proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+                proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+                    if (code === 0) return resolve(null);
+                    const details = this.formatFfmpegFailure({
+                        label: 'Trim (copy)',
+                        code,
+                        signal,
+                        stderr,
+                        command: cmd
+                    });
+                    reject(this.makeFfmpegError('ffmpeg failed', details));
+                });
                 proc.on('error', reject);
             });
 
@@ -196,19 +247,21 @@ export class TVHeadEndTrimmer {
 
         // Log command
         this.logger.info('\nTranscode Command:');
-        this.logger.info(chalk.white(formatCommand('ffmpeg', args)));
+        this.logger.info(colors.onSurface(formatCommand('ffmpeg', args)));
 
         if (this.options.test) {
-            this.logger.info(chalk.yellow('TEST MODE: Transcode command not executed'));
+            this.logger.info(colors.tertiary('TEST MODE: Transcode command not executed'));
             return true;
         }
-        this.logger.info(chalk.yellow('Executing transcode operation...'));
+        this.logger.info(colors.tertiary('Executing transcode operation…'));
 
         try {
             await new Promise((resolve, reject) => {
-                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+                const cmd = formatCommand('ffmpeg', args);
+                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
                 let buffer = '';
                 let lastPercent = -1;
+                let stderr = '';
                 proc.stdout.on('data', (chunk: Buffer) => {
                     buffer += chunk.toString();
                     const lines = buffer.split(/\r?\n/);
@@ -226,7 +279,18 @@ export class TVHeadEndTrimmer {
                         }
                     }
                 });
-                proc.on('close', (code) => code === 0 ? resolve(null) : reject(new Error('ffmpeg failed')));
+                proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+                proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+                    if (code === 0) return resolve(null);
+                    const details = this.formatFfmpegFailure({
+                        label: 'Transcode',
+                        code,
+                        signal,
+                        stderr,
+                        command: cmd
+                    });
+                    reject(this.makeFfmpegError('ffmpeg failed', details));
+                });
                 proc.on('error', reject);
             });
             const stats = await fs.stat(outputPath);
@@ -334,18 +398,20 @@ export class TVHeadEndTrimmer {
         args.push('-nostats', '-progress', 'pipe:1', outputPath, '-y');
 
         this.logger.info('\nTrim+Transcode Command:');
-        this.logger.info(chalk.white(formatCommand('ffmpeg', args)));
+        this.logger.info(colors.onSurface(formatCommand('ffmpeg', args)));
         if (this.options.test) {
-            this.logger.info(chalk.yellow('TEST MODE: Command not executed'));
+            this.logger.info(colors.tertiary('TEST MODE: Command not executed'));
             return true;
         }
 
-        this.logger.info(chalk.yellow('Executing trim+transcode operation...'));
+        this.logger.info(colors.tertiary('Executing trim+transcode operation…'));
         try {
             await new Promise((resolve, reject) => {
-                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+                const cmd = formatCommand('ffmpeg', args);
+                const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
                 let buffer = '';
                 let lastPercent = -1;
+                let stderr = '';
                 proc.stdout.on('data', (chunk: Buffer) => {
                     buffer += chunk.toString();
                     const lines = buffer.split(/\r?\n/);
@@ -362,7 +428,18 @@ export class TVHeadEndTrimmer {
                         }
                     }
                 });
-                proc.on('close', (code) => code === 0 ? resolve(null) : reject(new Error('ffmpeg failed')));
+                proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+                proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+                    if (code === 0) return resolve(null);
+                    const details = this.formatFfmpegFailure({
+                        label: 'Trim+Transcode',
+                        code,
+                        signal,
+                        stderr,
+                        command: cmd
+                    });
+                    reject(this.makeFfmpegError('ffmpeg failed', details));
+                });
                 proc.on('error', reject);
             });
             console.log(''); // newline after progress
@@ -382,7 +459,18 @@ export class TVHeadEndTrimmer {
             let stderr = '';
             const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
             proc.stderr.on('data', (data: Buffer) => { stderr += data.toString(); });
-            proc.on('close', (code: number) => code === 0 ? resolve(stderr) : reject(new Error('ffmpeg failed')));
+            proc.on('close', (code: number | null, signal: NodeJS.Signals | null) => {
+                if (code === 0) return resolve(stderr);
+                const cmd = formatCommand('ffmpeg', args);
+                const details = this.formatFfmpegFailure({
+                    label: 'Duration probe',
+                    code,
+                    signal,
+                    stderr,
+                    command: cmd
+                });
+                reject(this.makeFfmpegError('ffmpeg failed', details));
+            });
             proc.on('error', reject);
         });
         const match = output.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
@@ -616,7 +704,7 @@ export class TVHeadEndTrimmer {
 
         if (magickResult.programStart === null || magickResult.programEnd === null) {
             this.logger.error('\nSkipping: No usable Magick-based detection results');
-            magickResult.notes.forEach((note) => this.logger.info(chalk.gray(`  Note: ${note}`)));
+            magickResult.notes.forEach((note) => this.logger.info(colors.muted(`  Note: ${note}`)));
             return false;
         }
 

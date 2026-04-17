@@ -55,7 +55,7 @@ export class ProgressBar {
         }
 
         // Add progress bar
-        output += colors.primary(bar);
+        output += colors.secondary(bar);
 
         // Add percentage if enabled
         if (this.options.showPercentage) {
@@ -151,7 +151,7 @@ export class StepProgress {
             if (index < this.completedSteps) {
                 status = colors.success('✓');
             } else if (index === this.currentStep) {
-                status = colors.primary('●');
+                status = colors.secondary('●');
             } else {
                 status = colors.muted('○');
             }
@@ -252,7 +252,7 @@ export class FileProgress {
         const bar = createProgressBar(current, total, 20);
 
         process.stdout.write('\r\x1b[K');
-        process.stdout.write(`  ${colors.primary(bar)} ${percentage.toFixed(1)}%`);
+        process.stdout.write(`  ${colors.secondary(bar)} ${percentage.toFixed(1)}%`);
     }
 
     completeFile(message?: string) {

@@ -13,6 +13,12 @@ export async function extractFramesToBuffers(
     frameRate: number,
     logger: Logger
 ): Promise<Buffer[]> {
+    const trimTail = (s: string, maxChars: number) => {
+        if (s.length <= maxChars) return s;
+        const dropped = s.length - maxChars;
+        return `… (trimmed ${dropped} chars)\n` + s.slice(-maxChars);
+    };
+
     const args = [
         '-ss', ss.toString(),
         '-i', filePath,
@@ -27,10 +33,14 @@ export async function extractFramesToBuffers(
     ];
     logger.debug(`[FFMPEG] Extracting frames to memory: ffmpeg ${args.map(a => `'${a}'`).join(' ')}`);
     return new Promise((resolve, reject) => {
-        const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'ignore'] });
+        const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'pipe', 'pipe'] });
         const chunks: Buffer[] = [];
+        let stderr = '';
         if (proc.stdout) {
             proc.stdout.on('data', (chunk: Buffer) => chunks.push(chunk));
+        }
+        if (proc.stderr) {
+            proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
         }
         proc.on('close', (code) => {
             if (code === 0) {
@@ -39,7 +49,15 @@ export async function extractFramesToBuffers(
                 logger.info(`[FFMPEG] Extracted ${frames.length} frames to memory.`);
                 resolve(frames);
             } else {
-                reject(new Error('ffmpeg failed'));
+                const cmd = `ffmpeg ${args.map(a => `'${a}'`).join(' ')}`;
+                const details = [
+                    'Extract frames failed',
+                    `command: ${cmd}`,
+                    `exit: code=${code ?? 'null'}`,
+                    stderr.trim().length > 0 ? '--- ffmpeg stderr (tail) ---' : undefined,
+                    stderr.trim().length > 0 ? trimTail(stderr, 24_000) : undefined,
+                ].filter(Boolean).join('\n');
+                reject(new Error(`ffmpeg failed\n${details}`));
             }
         });
         proc.on('error', reject);

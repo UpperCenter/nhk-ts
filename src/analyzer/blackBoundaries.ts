@@ -15,6 +15,12 @@ export async function detectBlackBoundariesWithMagick(
     options: ProgramOptions,
     logger: Logger
 ): Promise<{ programStart: number | null, programEnd: number | null, notes: string[] }> {
+    const trimTail = (s: string, maxChars: number) => {
+        if (s.length <= maxChars) return s;
+        const dropped = s.length - maxChars;
+        return `… (trimmed ${dropped} chars)\n` + s.slice(-maxChars);
+    };
+
     const MASK_X = 13, MASK_Y = 60, MASK_W = 400, MASK_H = 54;
     const SIMILARITY_THRESHOLD = 0.92;
     const N_CONSECUTIVE = 2;
@@ -36,7 +42,18 @@ export async function detectBlackBoundariesWithMagick(
             let stderr = '';
             const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
             proc.stderr.on('data', (data) => { stderr += data.toString(); });
-            proc.on('close', (code) => code === 0 ? resolve(stderr) : reject(new Error('ffmpeg failed')));
+            proc.on('close', (code, signal) => {
+                if (code === 0) return resolve(stderr);
+                const cmd = `ffmpeg ${args.map(a => `'${a}'`).join(' ')}`;
+                const details = [
+                    'Duration probe failed',
+                    `command: ${cmd}`,
+                    `exit: code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+                    stderr.trim().length > 0 ? '--- ffmpeg stderr (tail) ---' : undefined,
+                    stderr.trim().length > 0 ? trimTail(stderr, 24_000) : undefined,
+                ].filter(Boolean).join('\n');
+                reject(new Error(`ffmpeg failed\n${details}`));
+            });
             proc.on('error', reject);
         });
         const match = output.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
@@ -96,8 +113,21 @@ export async function detectBlackBoundariesWithMagick(
             try {
                 logger.debug(`[${label}] FFmpeg command: ffmpeg ${args.map(a => `'${a}'`).join(' ')}`);
                 await new Promise((resolve, reject) => {
-                    const proc = spawn('ffmpeg', args, { stdio: 'ignore' });
-                    proc.on('close', (code) => code === 0 ? resolve(null) : reject(new Error('ffmpeg failed')));
+                    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+                    let stderr = '';
+                    if (proc.stderr) proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
+                    proc.on('close', (code, signal) => {
+                        if (code === 0) return resolve(null);
+                        const cmd = `ffmpeg ${args.map(a => `'${a}'`).join(' ')}`;
+                        const details = [
+                            `${label} frame extraction failed`,
+                            `command: ${cmd}`,
+                            `exit: code=${code ?? 'null'} signal=${signal ?? 'null'}`,
+                            stderr.trim().length > 0 ? '--- ffmpeg stderr (tail) ---' : undefined,
+                            stderr.trim().length > 0 ? trimTail(stderr, 24_000) : undefined,
+                        ].filter(Boolean).join('\n');
+                        reject(new Error(`ffmpeg failed\n${details}`));
+                    });
                     proc.on('error', reject);
                 });
                 logger.success(`[${label}] Frame extraction complete.`);

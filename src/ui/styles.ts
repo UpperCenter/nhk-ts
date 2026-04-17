@@ -1,32 +1,57 @@
 import chalk from 'chalk';
 
+/** Material-inspired dark terminal palette (aligned with MEDIA_PROC / NHK TS TUI mockup). */
 export const colors = {
-    // Primary colors
-    primary: chalk.hex('#00D4AA'),      // Teal
-    secondary: chalk.hex('#7C3AED'),    // Purple
-    accent: chalk.hex('#F59E0B'),       // Amber
+    primary: chalk.hex('#ccbdff'),
+    secondary: chalk.hex('#41ef79'),
+    tertiary: chalk.hex('#ffb950'),
 
-    // Status colors
-    success: chalk.hex('#10B981'),      // Green
-    warning: chalk.hex('#F59E0B'),      // Amber
-    error: chalk.hex('#EF4444'),        // Red
-    info: chalk.hex('#3B82F6'),         // Blue
+    success: chalk.hex('#41ef79'),
+    warning: chalk.hex('#ffb950'),
+    error: chalk.hex('#ffb4ab'),
+    info: chalk.hex('#41ef79'),
 
-    // Neutral colors
-    muted: chalk.hex('#6B7280'),        // Gray
-    subtle: chalk.hex('#9CA3AF'),       // Light gray
-    dim: chalk.hex('#D1D5DB'),          // Very light gray
+    muted: chalk.hex('#948ea1'),
+    subtle: chalk.hex('#cac3d8'),
+    dim: chalk.hex('#494455'),
 
-    // Text colors
-    text: chalk.hex('#111827'),         // Dark gray
-    textMuted: chalk.hex('#4B5563'),    // Medium gray
-    textSubtle: chalk.hex('#6B7280'),   // Light gray
+    onSurface: chalk.hex('#e3e0f2'),
+    onSurfaceVariant: chalk.hex('#cac3d8'),
+    outline: chalk.hex('#948ea1'),
+    outlineVariant: chalk.hex('#494455'),
 
-    // Background colors
-    bg: chalk.hex('#F9FAFB'),           // Very light gray
-    bgMuted: chalk.hex('#F3F4F6'),      // Light gray
-    border: chalk.hex('#E5E7EB'),       // Border gray
+    text: chalk.hex('#e3e0f2'),
+    textMuted: chalk.hex('#948ea1'),
+    textSubtle: chalk.hex('#cac3d8'),
+
+    bg: chalk.hex('#12121e'),
+    bgMuted: chalk.hex('#1f1e2b'),
+    border: chalk.hex('#494455'),
 } as const;
+
+function termWidth(): number {
+    return Math.max(40, Math.min(process.stdout.columns || 80, 120));
+}
+
+export function frameSectionTop(label: string): string {
+    const w = termWidth();
+    const prefix = `┌─ ${label} `;
+    const dashes = Math.max(1, w - prefix.length - 1);
+    return (
+        colors.outlineVariant('┌─ ') +
+        colors.primary.bold(label) +
+        colors.outlineVariant(` ${'─'.repeat(dashes)}┐`)
+    );
+}
+
+export function frameSectionBottom(): string {
+    const w = termWidth();
+    return colors.outlineVariant(`└${'─'.repeat(Math.max(2, w - 2))}┘`);
+}
+
+export function logTimestamp(): string {
+    return new Date().toTimeString().slice(0, 8);
+}
 
 /**
  * Text styling utilities
@@ -38,31 +63,27 @@ export const styles = {
     underline: chalk.underline,
     strikethrough: chalk.strikethrough,
 
-    // Custom styles
     header: (text: string) => colors.primary.bold(text),
     subheader: (text: string) => colors.secondary.bold(text),
-    code: (text: string) => chalk.bgHex('#F3F4F6').hex('#374151')(text),
-    highlight: (text: string) => chalk.bgHex('#FEF3C7').hex('#92400E')(text),
-    badge: (text: string) => chalk.bgHex('#E0E7FF').hex('#3730A3')(` ${text} `),
+    code: (text: string) => chalk.bgHex('#1a1a27').hex('#e3e0f2')(text),
+    highlight: (text: string) => chalk.bgHex('#292936').hex('#ffb950')(text),
+    badge: (text: string) => chalk.bgHex('#7d52ff').hex('#12121e')(` ${text} `),
 
-    // Status styles
     success: (text: string) => colors.success.bold(text),
     warning: (text: string) => colors.warning.bold(text),
     error: (text: string) => colors.error.bold(text),
     info: (text: string) => colors.info.bold(text),
 
-    // Layout styles
     separator: (char: string = '─', length: number = 60) =>
-        colors.border(char.repeat(length)),
+        colors.outlineVariant(char.repeat(length)),
     divider: (char: string = '═', length: number = 60) =>
-        colors.primary(char.repeat(length)),
+        colors.outline(char.repeat(length)),
 } as const;
 
 /**
  * Box drawing characters for clean borders
  */
 export const borders = {
-    // Single line
     single: {
         topLeft: '┌',
         topRight: '┐',
@@ -76,7 +97,6 @@ export const borders = {
         tTop: '┬',
         tBottom: '┴',
     },
-    // Double line
     double: {
         topLeft: '╔',
         topRight: '╗',
@@ -90,7 +110,6 @@ export const borders = {
         tTop: '╦',
         tBottom: '╩',
     },
-    // Rounded
     rounded: {
         topLeft: '╭',
         topRight: '╮',
@@ -106,27 +125,31 @@ export const borders = {
     },
 } as const;
 
+const ol = (s: string) => colors.outlineVariant(s);
+
 /**
  * Create a box with content
  */
 export function createBox(
     content: string,
     title?: string,
-    style: 'single' | 'double' | 'rounded' = 'rounded'
+    style: 'single' | 'double' | 'rounded' = 'rounded',
 ) {
     const lines = content.split('\n');
     const maxWidth = Math.max(...lines.map(line => line.length), title?.length || 0);
-    const width = maxWidth + 4; // padding
+    const width = maxWidth + 4;
 
     const border = borders[style];
     const topBorder = title
-        ? `${border.topLeft}${border.horizontal} ${title} ${border.horizontal.repeat(width - title.length - 4)}${border.topRight}`
-        : `${border.topLeft}${border.horizontal.repeat(width - 2)}${border.topRight}`;
+        ? `${ol(border.topLeft + border.horizontal)} ${colors.primary(title)} ${ol(
+              border.horizontal.repeat(Math.max(0, width - title.length - 4)) + border.topRight,
+          )}`
+        : `${ol(border.topLeft + border.horizontal.repeat(width - 2) + border.topRight)}`;
 
-    const bottomBorder = `${border.bottomLeft}${border.horizontal.repeat(width - 2)}${border.bottomRight}`;
+    const bottomBorder = ol(border.bottomLeft + border.horizontal.repeat(width - 2) + border.bottomRight);
 
     const contentLines = lines.map(line =>
-        `${border.vertical} ${line.padEnd(maxWidth)} ${border.vertical}`
+        ol(border.vertical) + ` ${line.padEnd(maxWidth)} ` + ol(border.vertical),
     );
 
     return [topBorder, ...contentLines, bottomBorder].join('\n');
@@ -140,7 +163,7 @@ export function createProgressBar(
     total: number,
     width: number = 40,
     filled: string = '█',
-    empty: string = '░'
+    empty: string = '░',
 ): string {
     const percentage = Math.min(100, Math.max(0, (current / total) * 100));
     const filledWidth = Math.floor((percentage / 100) * width);
@@ -180,5 +203,3 @@ export function formatDuration(seconds: number): string {
         return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 }
-
-

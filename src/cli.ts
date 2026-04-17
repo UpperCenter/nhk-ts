@@ -6,7 +6,8 @@ import { checkDependencies } from './utils.js';
 import { TVHeadEndTrimmer } from './trimmer.js';
 import { ProgramOptions } from './types.js';
 import { Logger } from './logger.js';
-import chalk from 'chalk';
+import { colors } from './ui/styles.js';
+import { printAppChromeFooter, printAppChromeHeader } from './ui/chrome.js';
 
 program
     .name('nhk-ts')
@@ -58,12 +59,17 @@ if (process.argv.length <= 2) {
         quiet: options.quiet
     });
 
-    // Enhanced header with charm.sh styling
-    logger.section('NHK TVHeadEnd Recording Trimmer', () => {
-        logger.info(`Version: ${program.version()}`);
+    const pkgVersion = program.version() ?? '0.0.0';
+    if (!options.quiet) {
+        printAppChromeHeader('NHK_TS', pkgVersion);
+        logger.newline();
+    }
+
+    logger.section('SESSION', () => {
+        logger.info(`NHK TVHeadEnd Recording Trimmer · ${pkgVersion}`);
         logger.info('https://github.com/UpperCenter/nhk-ts');
         logger.newline();
-        logger.warning('This tool is in ALPHA and uses a lot of CPU/RAM. Use at your own risk.');
+        logger.warning('ALPHA — high CPU/RAM use. Use at your own risk.');
     });
 
     // Configuration display
@@ -101,6 +107,10 @@ if (process.argv.length <= 2) {
 
     logger.config(config);
     logger.newline();
+    if (!options.quiet) {
+        printAppChromeFooter(pkgVersion);
+        logger.newline();
+    }
 
     try {
         await checkDependencies();
@@ -113,25 +123,25 @@ if (process.argv.length <= 2) {
     if (options.transcode) {
         const validPresets = ['ultrafast', 'superfast', 'veryfast', 'faster', 'fast', 'medium', 'slow', 'slower', 'veryslow', 'placebo'];
         if (!validPresets.includes(options.preset)) {
-            console.error(chalk.red(`Invalid preset: ${options.preset}. Valid options: ${validPresets.join(', ')}`));
+            console.error(colors.error(`Invalid preset: ${options.preset}. Valid options: ${validPresets.join(', ')}`));
             process.exit(1);
         }
 
         const validHwAccel = ['none', 'nvenc', 'qsv', 'vaapi', 'auto'];
         if (options.hwAccel && !validHwAccel.includes(options.hwAccel)) {
-            console.error(chalk.red(`Invalid hardware acceleration: ${options.hwAccel}. Valid options: ${validHwAccel.join(', ')}`));
+            console.error(colors.error(`Invalid hardware acceleration: ${options.hwAccel}. Valid options: ${validHwAccel.join(', ')}`));
             process.exit(1);
         }
 
         const validEncoders = ['libx264', 'libx265', 'h264_nvenc', 'hevc_nvenc', 'h264_qsv', 'hevc_qsv', 'h264_vaapi', 'hevc_vaapi'];
         if (options.encoder && !validEncoders.includes(options.encoder)) {
-            console.error(chalk.red(`Invalid encoder: ${options.encoder}. Valid options: ${validEncoders.join(', ')}`));
+            console.error(colors.error(`Invalid encoder: ${options.encoder}. Valid options: ${validEncoders.join(', ')}`));
             process.exit(1);
         }
 
         // Apply --best flag settings
         if (options.best) {
-            logger.info(chalk.cyan('Best quality mode enabled - optimizing settings for modern systems...'));
+            logger.info('Best quality mode enabled — optimizing settings for modern systems…');
             // Override settings for best quality with hardware acceleration
             if (!options.encoder) {
                 options.hwAccel = options.hwAccel || 'auto';

@@ -1,4 +1,12 @@
-import { colors, styles, borders, createBox, createProgressBar } from './styles.js';
+import {
+    colors,
+    styles,
+    createBox,
+    createProgressBar,
+    frameSectionTop,
+    frameSectionBottom,
+    logTimestamp,
+} from './styles.js';
 
 /**
  * Header component with title and optional subtitle
@@ -27,11 +35,9 @@ export function Section({ title, children }: {
     title: string;
     children: () => void;
 }) {
-    const divider = styles.divider('─', 60);
-    console.log(`\n${styles.header(title)}`);
-    console.log(divider);
+    console.log(`\n${frameSectionTop(title)}`);
     children();
-    console.log(divider);
+    console.log(frameSectionBottom());
 }
 
 /**
@@ -46,26 +52,18 @@ export function Status({
     message: string;
     details?: string | undefined;
 }) {
-    const icons = {
-        info: 'ℹ',
-        success: '✓',
-        warning: '⚠',
-        error: '✗',
-    };
+    const level = {
+        info: { tag: 'INFO', tagColor: colors.secondary },
+        success: { tag: 'SUCCESS', tagColor: colors.secondary },
+        warning: { tag: 'WARN', tagColor: colors.tertiary },
+        error: { tag: 'ERROR', tagColor: colors.error },
+    }[type];
 
-    const colorFn = {
-        info: colors.info,
-        success: colors.success,
-        warning: colors.warning,
-        error: colors.error,
-    };
-
-    const icon = icons[type];
-    const color = colorFn[type];
-
-    console.log(`${color(icon)} ${message}`);
+    const ts = colors.outline(`[${logTimestamp()}]`);
+    const tag = level.tagColor.bold(`${level.tag}:`);
+    console.log(`${ts}  ${tag}  ${colors.onSurface(message)}`);
     if (details) {
-        console.log(`  ${colors.muted(details)}`);
+        console.log(`${ts}  ${colors.muted('…')}     ${colors.onSurfaceVariant(details)}`);
     }
 }
 
@@ -103,7 +101,7 @@ export class Progress {
 
         // Clear line and move cursor to beginning
         process.stdout.write('\r\x1b[K');
-        process.stdout.write(`${colors.primary(bar)}${label}`);
+        process.stdout.write(`${colors.secondary(bar)}${label}`);
     }
 
     complete(message?: string) {
@@ -192,24 +190,25 @@ export function Table({
     const headerRow = headers.map((header, i) =>
         styles.bold(header.padEnd(colWidths[i] || 0))
     ).join(' │ ');
-    console.log(`┌${'─'.repeat(totalWidth - 2)}┐`);
-    console.log(`│ ${headerRow} │`);
+    const e = colors.outlineVariant;
+    console.log(`${e('┌' + '─'.repeat(totalWidth - 2) + '┐')}`);
+    console.log(`${e('│')} ${headerRow} ${e('│')}`);
 
     // Print separator
     const separator = headers.map((_, i) =>
         '─'.repeat(colWidths[i] || 0)
     ).join('─┼─');
-    console.log(`├─${separator}─┤`);
+    console.log(`${e('├─' + separator + '─┤')}`);
 
     // Print rows
     rows.forEach(row => {
         const rowContent = row.map((cell, i) =>
             (cell || '').padEnd(colWidths[i] || 0)
         ).join(' │ ');
-        console.log(`│ ${rowContent} │`);
+        console.log(`${e('│')} ${rowContent} ${e('│')}`);
     });
 
-    console.log(`└${'─'.repeat(totalWidth - 2)}┘`);
+    console.log(`${e('└' + '─'.repeat(totalWidth - 2) + '┘')}`);
 }
 
 /**

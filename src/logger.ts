@@ -1,4 +1,4 @@
-import { colors, styles } from './ui/styles.js';
+import { colors, styles, logTimestamp } from './ui/styles.js';
 import { Status, Section, Alert, Card } from './ui/components.js';
 import { ConfigTable, KeyValueTable } from './ui/table.js';
 import { ProgressBar, Spinner, StepProgress, FileProgress } from './ui/progress.js';
@@ -27,6 +27,15 @@ export class Logger {
         this.spinner = new Spinner();
     }
 
+    private splitMessageAndDetails(message: string, details?: string): { message: string; details?: string } {
+        if (details && details.trim().length > 0) return { message, details };
+        const idx = message.indexOf('\n');
+        if (idx === -1) return { message };
+        const first = message.slice(0, idx).trimEnd();
+        const rest = message.slice(idx + 1).trim();
+        return rest.length > 0 ? { message: first, details: rest } : { message: first };
+    }
+
     private shouldLog(level: LogLevel): boolean {
         if (this.quiet) return false;
 
@@ -53,32 +62,37 @@ export class Logger {
     // Basic logging methods
     info(message: string, details?: string) {
         if (!this.shouldLog('normal')) return;
-        Status({ type: 'info', message, details: details || undefined });
+        const split = this.splitMessageAndDetails(message, details);
+        Status({ type: 'info', message: split.message, details: split.details });
     }
 
     success(message: string, details?: string) {
         if (!this.quiet) {
-            Status({ type: 'success', message, details: details || undefined });
+            const split = this.splitMessageAndDetails(message, details);
+            Status({ type: 'success', message: split.message, details: split.details });
         }
     }
 
     warning(message: string, details?: string) {
         if (!this.quiet) {
-            Status({ type: 'warning', message, details: details || undefined });
+            const split = this.splitMessageAndDetails(message, details);
+            Status({ type: 'warning', message: split.message, details: split.details });
         }
     }
 
     error(message: string, details?: string) {
         if (!this.quiet) {
-            Status({ type: 'error', message, details: details || undefined });
+            const split = this.splitMessageAndDetails(message, details);
+            Status({ type: 'error', message: split.message, details: split.details });
         }
     }
 
     debug(message: string, details?: string) {
         if (!this.shouldLog('verbose')) return;
-        console.log(`${colors.muted('🐞')} ${colors.muted(message)}`);
+        const ts = colors.outline(`[${logTimestamp()}]`);
+        console.log(`${ts}  ${colors.primary.bold('DEBUG:')}  ${colors.onSurfaceVariant(message)}`);
         if (details) {
-            console.log(`  ${colors.muted(details)}`);
+            console.log(`${ts}  ${colors.muted('…')}     ${colors.onSurfaceVariant(details)}`);
         }
     }
 
@@ -114,24 +128,25 @@ export class Logger {
             const headerRow = headers.map((header, i) =>
                 styles.bold(header.padEnd(colWidths[i] || 0))
             ).join(' │ ');
-            console.log(`┌${'─'.repeat(totalWidth - 2)}┐`);
-            console.log(`│ ${headerRow} │`);
+            const e = colors.outlineVariant;
+            console.log(`${e('┌' + '─'.repeat(totalWidth - 2) + '┐')}`);
+            console.log(`${e('│')} ${headerRow} ${e('│')}`);
 
             // Separator
             const separator = headers.map((_, i) =>
                 '─'.repeat(colWidths[i] || 0)
             ).join('─┼─');
-            console.log(`├─${separator}─┤`);
+            console.log(`${e('├─' + separator + '─┤')}`);
 
             // Rows
             rows.forEach(row => {
                 const rowContent = row.map((cell, i) =>
                     (cell || '').padEnd(colWidths[i] || 0)
                 ).join(' │ ');
-                console.log(`│ ${rowContent} │`);
+                console.log(`${e('│')} ${rowContent} ${e('│')}`);
             });
 
-            console.log(`└${'─'.repeat(totalWidth - 2)}┘`);
+            console.log(`${e('└' + '─'.repeat(totalWidth - 2) + '┘')}`);
         }
     }
 

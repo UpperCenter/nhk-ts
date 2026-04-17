@@ -1,5 +1,7 @@
 import { colors, styles } from './styles.js';
 
+const e = colors.outlineVariant;
+
 export interface TableColumn {
     key: string;
     title: string;
@@ -105,13 +107,13 @@ export class Table {
             return isHeader ? styles.bold(formattedValue) : formattedValue;
         }).join(' │ ');
 
-        console.log(`│${padding}${content}${padding}│`);
+        console.log(`${e('│')}${padding}${content}${padding}${e('│')}`);
     }
 
     private renderSeparator(colWidths: number[]) {
         const padding = ' '.repeat(this.options.padding!);
         const separator = colWidths.map(width => '─'.repeat(width)).join('─┼─');
-        console.log(`├${padding}${separator}${padding}┤`);
+        console.log(`${e('├')}${padding}${separator}${padding}${e('┤')}`);
     }
 
     private renderBorder(type: 'top' | 'bottom', colWidths: number[]) {
@@ -124,7 +126,7 @@ export class Table {
         const line = '─'.repeat(totalWidth);
         const endBorder = type === 'top' ? '┐' : '┘';
 
-        console.log(`${border}${line}${endBorder}`);
+        console.log(`${e(border + line + endBorder)}`);
     }
 }
 
@@ -143,7 +145,7 @@ export function KeyValueTable(
 
     items.forEach(item => {
         const key = item.key.padEnd(maxKeyWidth);
-        const value = item.highlight ? styles.highlight(item.value) : item.value;
+        const value = item.highlight ? styles.highlight(item.value) : colors.onSurface(item.value);
         console.log(`${colors.muted(key)}: ${value}`);
     });
 }
