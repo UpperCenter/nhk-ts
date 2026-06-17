@@ -28,6 +28,7 @@ export interface ProgramOptions {
     metadataRateLimit?: number;
     metadataUserAgent?: string;
     deleteOriginal: boolean;
+    deleteDuplicates: boolean;
     transcode: boolean;
     preset: 'ultrafast' | 'superfast' | 'veryfast' | 'faster' | 'fast' | 'medium' | 'slow' | 'slower' | 'veryslow' | 'placebo';
     crf: number;

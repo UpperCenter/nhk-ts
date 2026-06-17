@@ -43,7 +43,8 @@ program
     .option('--hw-accel <type>', 'Hardware acceleration: none, nvenc, qsv, vaapi, auto', 'none')
     .option('--encoder <encoder>', 'Video encoder: libx264, libx265, h264_nvenc, hevc_nvenc, h264_qsv, hevc_qsv, h264_vaapi, hevc_vaapi')
     .option('--best', 'Use best quality settings optimized for modern systems (overrides preset/crf/encoder)', false)
-    .option('--delete-original', 'Delete original .ts and .nfo files only if ALL requested operations (metadata, trimming, transcoding) complete successfully', false);
+    .option('--delete-original', 'Delete original .ts and .nfo files only if ALL requested operations (metadata, trimming, transcoding) complete successfully', false)
+    .option('--delete-duplicates', 'Delete .ts and .nfo when skipped because episode is already in history DB', false);
 
 program.parse();
 
@@ -96,6 +97,7 @@ if (process.argv.length <= 2) {
         'History DB': options.historyDb || '(none)',
         'Metadata Rate Limit': `${options.metadataRateLimit}/s`,
         'Delete Originals': options.deleteOriginal.toString(),
+        'Delete Duplicates': options.deleteDuplicates.toString(),
         'Transcode': options.transcode.toString(),
         'Preset': options.preset,
         'CRF': options.crf.toString(),
@@ -111,6 +113,11 @@ if (process.argv.length <= 2) {
     if (!options.quiet) {
         printAppChromeFooter(pkgVersion);
         logger.newline();
+    }
+
+    if (options.deleteDuplicates && !options.metadata) {
+        console.error(colors.error('--delete-duplicates requires --metadata'));
+        process.exit(1);
     }
 
     try {

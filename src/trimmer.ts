@@ -508,6 +508,66 @@ export class TVHeadEndTrimmer {
         return files;
     }
 
+    private async deleteRecordingFiles(fullPath: string): Promise<void> {
+        try {
+            await fs.unlink(fullPath);
+            this.logger.success(`Deleted original file: ${fullPath}`);
+        } catch (err) {
+            this.logger.warning(`Failed to delete .ts file: ${err}`);
+        }
+
+        try {
+            const dir = path.dirname(fullPath);
+            const base = path.basename(fullPath, '.ts');
+            const candidates: string[] = [
+                path.join(dir, `${base}.nfo`),
+                path.join(dir, `${base.endsWith('_') ? base.slice(0, -1) : base}.nfo`),
+            ];
+            const stripped = stripNHKTimestampSuffix(base);
+            if (!candidates.some(p => p.endsWith(`${stripped}.nfo`))) {
+                candidates.push(path.join(dir, `${stripped}.nfo`));
+            }
+            let deleted = false;
+            for (const c of candidates) {
+                try {
+                    await fs.access(c);
+                    await fs.unlink(c);
+                    this.logger.success(`Deleted NFO file: ${c}`);
+                    deleted = true;
+                    break;
+                } catch {}
+            }
+            if (!deleted) {
+                this.logger.info(`NFO file not found (skipping): ${path.join(dir, `${base}.nfo`)}`);
+            }
+        } catch (err) {
+            this.logger.warning(`Failed to delete NFO file: ${err}`);
+        }
+    }
+
+    private async maybeDeleteHistoryDuplicate(fullPath: string, metaInfo: MetadataInfo): Promise<void> {
+        if (this.options.test || !this.options.deleteDuplicates) {
+            return;
+        }
+
+        let confirmed = this.options.yes;
+        if (!confirmed) {
+            const seasonStr = String(metaInfo.season).padStart(2, '0');
+            const episodeStr = String(metaInfo.episodeNumber).padStart(2, '0');
+            const response = await askQuestion(
+                `\nDelete duplicate recording for S${seasonStr}E${episodeStr} (${metaInfo.episodeName})? (y/N): `,
+            );
+            confirmed = response.toLowerCase() === 'y';
+        }
+
+        if (!confirmed) {
+            this.logger.info('[HISTORY] Duplicate deletion skipped by user');
+            return;
+        }
+
+        await this.deleteRecordingFiles(fullPath);
+    }
+
     private async processRecording(file: {
         name: string;
         fullPath: string;
@@ -688,6 +748,7 @@ export class TVHeadEndTrimmer {
                     // Check history database
                     if (this.dbService && await this.dbService.isAlreadyProcessed(metaInfo)) {
                         this.logger.warning(`[HISTORY] Skipping episode already in history DB: S${metaInfo.season}E${metaInfo.episodeNumber} - ${metaInfo.episodeName}`);
+                        await this.maybeDeleteHistoryDuplicate(file.fullPath, metaInfo);
                         return true; // Mark as successful to avoid failure logs
                     }
                 } else {
@@ -865,43 +926,7 @@ export class TVHeadEndTrimmer {
             );
 
             this.logger.info(`Delete check: Requested operations: ${requestedOps.join(', ')}, Completed: ${completedOps.join(', ')}`);
-            // Delete .ts file
-            try {
-                await fs.unlink(file.fullPath);
-                this.logger.success(`Deleted original file: ${file.fullPath}`);
-            } catch (err) {
-                this.logger.warning(`Failed to delete .ts file: ${err}`);
-            }
-
-            // Delete .nfo file
-            try {
-                const dir = path.dirname(file.fullPath);
-                const base = path.basename(file.fullPath, '.ts');
-                // Prefer exact timestamped NFO, fall back to legacy names
-                const candidates: string[] = [
-                    path.join(dir, `${base}.nfo`),
-                    path.join(dir, `${base.endsWith('_') ? base.slice(0, -1) : base}.nfo`),
-                ];
-                const stripped = stripNHKTimestampSuffix(base);
-                if (!candidates.some(p => p.endsWith(`${stripped}.nfo`))) {
-                    candidates.push(path.join(dir, `${stripped}.nfo`));
-                }
-                let deleted = false;
-                for (const c of candidates) {
-                    try {
-                        await fs.access(c);
-                        await fs.unlink(c);
-                        this.logger.success(`Deleted NFO file: ${c}`);
-                        deleted = true;
-                        break;
-                    } catch {}
-                }
-                if (!deleted) {
-                    this.logger.info(`NFO file not found (skipping): ${path.join(dir, `${base}.nfo`)}`);
-                }
-            } catch (err) {
-                this.logger.warning(`Failed to delete NFO file: ${err}`);
-            }
+            await this.deleteRecordingFiles(file.fullPath);
         } else if (this.options.deleteOriginal && !this.options.test) {
             // Log operation status and why we're not deleting
             const requestedOps = Object.keys(operations).filter(op => operations[op as keyof typeof operations]);
